@@ -7,7 +7,7 @@ class Rescaling(layers.Layer):
     '''
     Rescale the image into 01 interval.
     The built-in `tf.keras.layers.Rescaling()` couldn't work here, because it only receives fixed float arguments.
-    What we want is to rescale each image according to its maximum and minimum pixel values, rather than any fixed values.    
+    What we want is to rescale each image according to its maximum and minimum pixel values, rather than any fixed values.
     '''
 
     def call(self, inputs):
@@ -36,14 +36,15 @@ class Unet:
 
     def define_model(self, n_depth=2):
         '''
-        Assume the gray image has shape (height, width, channel)
+        Assume the image has shape (height, width, channels)
         Parameters
         ---
         n_depth:    Defaults to 2, it's suitable for image of size about (128, 128). the depth of contracting path, i.e. the number of MaxPooling2D layers in total. 
                     If n_depth is too big, image of small size will not be properly processed
         '''
         inputs = Input(shape=self.config.input_shape)
-        inputs = Rescaling()(inputs)
+        # 不能用于输入图块，容易导致黑色背景变得很白
+        # inputs = Rescaling()(inputs)
 
         contracting = []
         for i in range(n_depth+1):
@@ -159,18 +160,37 @@ class Unet:
 
     def compile(self, optimizer="rmsprop"):
         # todo 选择更优的optimizer
-        # 自定义metric: PSNR SSIM
-        self.model.compile(optimizer,
-                           loss=self.loss,
-                        #    metrics=[]
-                           )
+        # 训练过程不计算PSNR和SSIM
+        self.model.compile(optimizer, loss=self.loss)
         self.compiled = True
 
-    def loss(self, y_true, y_pred):
-        coords = y_true[..., -1] == 1
-        y_true = tf.cast(y_true[..., :-1], tf.float32)
+    def psnr(self, y_true, y_pred):
+        '''
+        Parameter
+        ---
+        y_true: (batch_size, height, width, channels), float32, 01 interval, there's no additional channel as mask
+        y_pred: (batch_size, height, width, channels), float32, 01 interval
+        '''
+        # m = tf.reduce_max(y_true)
+        # n = tf.reduce_min(y_true)
+        # y_true = (y_true-n)/(m-n)        
+        return tf.image.psnr(y_true, y_pred, 1)
 
+    def ssim(self, y_true, y_pred):
+        return tf.image.ssim(y_true, y_pred, 1)
+
+    def loss(self, y_true, y_pred):
+        '''
+        Parameter
+        ---
+        y_true: (batch_size, height, width, channels+1), float32, 01 interval, the additional channel is mask
+        y_pred: (batch_size, height, width, channels), float32, 01 interval
+        '''
+        coords = y_true[..., -1] == 1
         # 归一化
+        # y_true = tf.cast(y_true[..., :-1], tf.float32)
+        y_true = y_true[..., :-1]
+
         m = tf.reduce_max(y_true)
         n = tf.reduce_min(y_true)
         y_true = (y_true-n)/(m-n)

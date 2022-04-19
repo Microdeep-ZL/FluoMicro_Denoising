@@ -138,22 +138,22 @@ class N2VDataGenerator:
                     for i in self._shuffle_range(image.n_frames):
                         if validation == (i in self.is_validation.get(file_path, [])):
                             image.seek(i)
-                            yield np.array(image)
-                            # yield np.array(image).astype("float32")
+                            # yield np.array(image)
+                            yield np.array(image).astype("float32")
 
                             if self.config.data_augmentation:
                                 for j in self._shuffle_range(7):
                                     transposed_image = image.transpose(j)
-                                    yield np.array(transposed_image)
-                                    # yield np.array(transposed_image).astype("float32")
+                                    # yield np.array(transposed_image)
+                                    yield np.array(transposed_image).astype("float32")
 
-    # def _normalization(self):
-    #     '''Return the image array normalized to 01 interval'''
-    #     image = next(self.image_generator)
-    #     m = image.max()
-    #     n = image.min()
-    #     image = (image-n)/(m-n)
-    #     return image
+    def _normalization(self, image_generator):
+        '''Return the image array normalized to 01 interval''' 
+        image = next(image_generator)
+        m = image.max()
+        n = image.min()
+        image = (image-n)/(m-n)
+        return image
 
     def _get_patch_target(self, validation=False):
         '''
@@ -163,8 +163,8 @@ class N2VDataGenerator:
         '''
         image_generator = self._load_images(validation)
         while 1:
-            # image = self._normalization()
-            image = next(image_generator)
+            image = self._normalization(image_generator)
+            # image = next(image_generator)
 
             image_shape = image.shape
             patch_shape = self.config.patch_shape
