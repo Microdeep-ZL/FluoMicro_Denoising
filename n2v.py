@@ -4,21 +4,13 @@ from tensorflow.keras import layers
 
 
 class N2VConfig:
-    '''
-    Paramerters
-    ---
-    file_paths: a list of file paths 
-    patch_shape: the shape of patch. Default (128, 128)
-    batch_size: the number of sample patches in a batch
-    validation_split: the percentage of validation set from the whole dataset
-    '''
-
     def __init__(self, file_paths,
+                 ground_truth_paths=None,
                  patch_shape=(64, 64),
                  patches_per_batch=32,
                  epochs=20,
                  perc_pix=0.74,
-                 data_augmentation=True,
+                 data_augmentation=0,
                  conv="SeparableConv2D",
                  RGB=False,
                  validation_split=0
@@ -26,13 +18,24 @@ class N2VConfig:
         '''
         Parameter
         ---
-        conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
-        RGB: Whether the image is RGB or gray. Defaults to False
+        - file_paths: a list of tif file paths (noisy images)
+        - ground_truth_paths: a list of tif file paths (clean images, not for training, only for evaluation)
+            Note that `file_paths` and `ground_truth_paths` should correspond to each other
+        - patch_shape: the shape of patch. Default (64, 64)
+        - validation_split: the percentage of validation set from the whole dataset        
+        - conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
+        - RGB: Whether the image is RGB or gray. Defaults to False. 
+        - data_augmentation: Integer from 0-7, represents how many additional folds you want the training images to have. 
+            For example, 5 means the number of images will be multiplied by 6. Defaults to 0
         '''
 
         assert patch_shape[0] % 2 == 0 and patch_shape[1] % 2 == 0, 'Patch shape must be divisible by 2'
-
+        if ground_truth_paths:
+            assert len(file_paths)==len(ground_truth_paths), 'file_paths and ground_truth_paths must correspond to each other'
         self.file_paths = file_paths
+        # todo 怎么用config设置predict和evaluate的参数
+        self.ground_truth_paths = ground_truth_paths
+
         self.RGB = RGB
         channels = (3,) if RGB else (1,)
         self.input_shape = (None, None) + channels
@@ -88,21 +91,26 @@ class N2VDataGenerator:
 
     def prepare_generator_steps(self):
         training_patches_total = 0
-        validation_patches_total=0
+        validation_patches_total = 0
         patch_shape = self.config.patch_shape
         for file_path in self.config.file_paths:
             with Image.open(file_path) as image:
-                a = len(range(0, image.size[0] - patch_shape[0] + 1, patch_shape[0]))
-                b = len(range(0, image.size[1] - patch_shape[1] + 1, patch_shape[1]))
+                a = len(range(0, image.size[0] -
+                        patch_shape[0] + 1, patch_shape[0]))
+                b = len(range(0, image.size[1] -
+                        patch_shape[1] + 1, patch_shape[1]))
                 validation_frames = len(self.is_validation.get(file_path, []))
-                training_patches_total += a*b*(image.n_frames-validation_frames)
-                validation_patches_total+=a*b*validation_frames
+                training_patches_total += a*b * \
+                    (image.n_frames-validation_frames)
+                validation_patches_total += a*b*validation_frames
 
-        steps_per_epoch = int(training_patches_total/self.config.patches_per_batch)
-        validation_steps=int(validation_patches_total/self.config.patches_per_batch)
+        steps_per_epoch = int(training_patches_total /
+                              self.config.patches_per_batch)
+        validation_steps = int(validation_patches_total /
+                               self.config.patches_per_batch)
         if self.config.data_augmentation:
-            validation_steps*=8
-            steps_per_epoch *= 8
+            validation_steps *= self.config.data_augmentation + 1
+            steps_per_epoch *= self.config.data_augmentation + 1
         self.config.set_steps_per_epoch(steps_per_epoch)
         self.config.set_validation_steps(validation_steps)
 
@@ -116,40 +124,91 @@ class N2VDataGenerator:
             patches: (patches_per_batch, height, width, channels)
             targets: (patches_per_batch, height, width, channels+1)
         '''
-        patch_target_generator=self._get_patch_target(validation)
+        patch_target_generator = self._get_patch_target(validation)
         while 1:
-            patches, targets = [], []
-            for _ in range(self.config.patches_per_batch):
-                patch, target = next(patch_target_generator)
-                patches.append(patch)
-                targets.append(target)
+            try:
+                patches, targets = [], []
+                for _ in range(self.config.patches_per_batch):
+                    patch, target = next(patch_target_generator)
+                    patches.append(patch)
+                    targets.append(target)
+            except RuntimeError:
+                break
+            finally:
+                if patches:
+                    patches = np.concatenate(patches)
+                    targets = np.concatenate(targets)
+                    yield patches, targets
 
-            if len(patches) != 0:
-                patches = np.concatenate(patches)
-                targets = np.concatenate(targets)
-                yield patches, targets
+    def get_evaluation_data(self, batch_size=1):
+        '''
+        Return (noisy_images, clean_images)
+            noisy_images: (batch_size, height, width, channels)
+            clean_images: (batch_size, height, width, channels)
+        '''
+        noisy_clean_generator = self._get_noisy_clean()
+        while 1:
+            try:
+                noisy_images, clean_images = [], []
+                for _ in range(batch_size):
+                    noisy, clean = next(noisy_clean_generator)
+                    noisy_images.append(noisy)
+                    clean_images.append(clean)   
+            except StopIteration:
+                break
+            except RuntimeError:
+                yield None, None
+            finally:
+                if noisy_images:
+                    noisy_images = np.concatenate(noisy_images)
+                    clean_images = np.concatenate(clean_images)
+                    yield noisy_images, clean_images
+
+    def _get_noisy_clean(self):
+        '''
+        Return (noisy_image, clean_image), float32, already normalized to 01 interval
+            noisy_image: (1, height, width, channels)
+            clean_image: (1, height, width, channels)
+        '''
+        noisy_paths=self.config.file_paths
+        clean_paths=self.config.ground_truth_paths
+        for i in range(len(noisy_paths)):
+            with Image.open(noisy_paths[i]) as noisy_image:
+                with Image.open(clean_paths[i]) as clean_image:
+                    for j in range(noisy_image.n_frames):
+                            noisy_image.seek(j)
+                            clean_image.seek(j)                        
+                            noisy = np.array(noisy_image).astype("float32")
+                            clean = np.array(clean_image).astype("float32")
+
+                            axis = 0 if self.config.RGB else (0,-1)
+                            noisy = np.expand_dims(noisy, axis)
+                            clean = np.expand_dims(clean, axis)
+
+                            noisy = self._normalization(noisy)
+                            clean = self._normalization(clean)
+                            yield noisy, clean
+            raise RuntimeError("The current file has ended, please save a new tif file for the restored images")
 
     def _load_images(self, validation=False):
         '''Return image array (height, width) or (height, width, channels), depending on the image.'''
-        while 1:
-            for file_path in self.config.file_paths:
-                with Image.open(file_path) as image:
-                    # 随机打乱图片的顺序
-                    for i in self._shuffle_range(image.n_frames):
-                        if validation == (i in self.is_validation.get(file_path, [])):
-                            image.seek(i)
-                            # yield np.array(image)
-                            yield np.array(image).astype("float32")
+        for file_path in self.config.file_paths:
+            with Image.open(file_path) as image:
+                # 随机打乱图片的顺序
+                for i in self._shuffle_range(image.n_frames):
+                    if validation == (i in self.is_validation.get(file_path, [])):
+                        image.seek(i)
+                        # yield np.array(image)
+                        yield np.array(image).astype("float32")
 
-                            if self.config.data_augmentation:
-                                for j in self._shuffle_range(7):
-                                    transposed_image = image.transpose(j)
-                                    # yield np.array(transposed_image)
-                                    yield np.array(transposed_image).astype("float32")
+                        if self.config.data_augmentation:
+                            for j in self._shuffle_range(7)[:self.config.data_augmentation]:
+                                transposed_image = image.transpose(j)
+                                # yield np.array(transposed_image)
+                                yield np.array(transposed_image).astype("float32")
 
-    def _normalization(self, image_generator):
-        '''Return the image array normalized to 01 interval''' 
-        image = next(image_generator)
+    def _normalization(self, image):
+        '''Return the image array normalized to 01 interval'''
         m = image.max()
         n = image.min()
         image = (image-n)/(m-n)
@@ -163,8 +222,8 @@ class N2VDataGenerator:
         '''
         image_generator = self._load_images(validation)
         while 1:
-            image = self._normalization(image_generator)
-            # image = next(image_generator)
+            image = next(image_generator)
+            image = self._normalization(image)
 
             image_shape = image.shape
             patch_shape = self.config.patch_shape
@@ -232,7 +291,8 @@ class N2VDataGenerator:
             indexing = (0,) + coords + (slice(1),)
             indexing_mask = (0,) + coords + (1,)
 
-        target=np.concatenate([patch, np.zeros_like(patch[...,0,np.newaxis])],axis=-1)
+        target = np.concatenate(
+            [patch, np.zeros_like(patch[..., 0, np.newaxis])], axis=-1)
         target[indexing_mask] = 1
         patch[indexing] = self._value_manipulation(patch[0], coords)
         return target

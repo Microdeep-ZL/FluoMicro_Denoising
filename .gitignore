@@ -2,3 +2,4 @@ test.ipynb
 __pycache__
 ckpt
 tensorboard
+restored_images/*
