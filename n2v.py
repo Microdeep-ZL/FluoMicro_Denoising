@@ -59,12 +59,6 @@ class N2VDataGenerator:
 
     def __init__(self, config: N2VConfig):
         self.config = config
-        self.image_generator = self._load_images()
-        self.validation_image_generator = self._load_images(validation=True)
-        self.patch_target_generator = self._get_patch_target()
-        self.validation_patch_target_generator = self._get_patch_target(
-            validation=True)
-
         self.prepare_is_validation()
         self.prepare_generator_steps()
 
@@ -106,7 +100,7 @@ class N2VDataGenerator:
 
         steps_per_epoch = int(training_patches_total/self.config.patches_per_batch)
         validation_steps=int(validation_patches_total/self.config.patches_per_batch)
-        if self.config.validation_split:
+        if self.config.data_augmentation:
             validation_steps*=8
             steps_per_epoch *= 8
         self.config.set_steps_per_epoch(steps_per_epoch)
@@ -122,11 +116,11 @@ class N2VDataGenerator:
             patches: (patches_per_batch, height, width, channels)
             targets: (patches_per_batch, height, width, channels+1)
         '''
+        patch_target_generator=self._get_patch_target(validation)
         while 1:
             patches, targets = [], []
             for _ in range(self.config.patches_per_batch):
-                patch, target = next(
-                    self.validation_patch_target_generator if validation else self.patch_target_generator)
+                patch, target = next(patch_target_generator)
                 patches.append(patch)
                 targets.append(target)
 
@@ -167,10 +161,10 @@ class N2VDataGenerator:
             patch: (1, height, width, channels)
             target: (1, height, width, channels+1)
         '''
+        image_generator = self._load_images(validation)
         while 1:
             # image = self._normalization()
-            image = next(
-                self.validation_image_generator if validation else self.image_generator)
+            image = next(image_generator)
 
             image_shape = image.shape
             patch_shape = self.config.patch_shape
@@ -229,19 +223,16 @@ class N2VDataGenerator:
         ---
         target: (1, height, width, channels+1)
         '''
-        target = np.zeros_like(np.concatenate(
-            [patch, patch[..., 0, np.newaxis]], axis=-1))
         coords = self._get_stratified_coords()
 
         if self.config.RGB:
             indexing = (0,) + coords + (slice(3),)
-            indexing_mask = (0,) + coords + (4,)
+            indexing_mask = (0,) + coords + (3,)
         else:
             indexing = (0,) + coords + (slice(1),)
             indexing_mask = (0,) + coords + (1,)
 
-        # ? 为什么target要有两层
-        target[indexing] = patch[indexing]
+        target=np.concatenate([patch, np.zeros_like(patch[...,0,np.newaxis])],axis=-1)
         target[indexing_mask] = 1
         patch[indexing] = self._value_manipulation(patch[0], coords)
         return target

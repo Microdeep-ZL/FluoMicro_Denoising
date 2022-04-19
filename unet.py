@@ -11,12 +11,13 @@ class Rescaling(layers.Layer):
     '''
 
     def call(self, inputs):
+        inputs = tf.cast(inputs, dtype=tf.float32)
         m = tf.reduce_max(inputs)
         n = tf.reduce_min(inputs)
         scale = 1/(m-n)
         offset = -n/(m-n)
-        inputs = tf.cast(inputs, dtype=tf.float32)
         return inputs * scale + offset
+
 
 class Unet:
     '''
@@ -148,37 +149,35 @@ class Unet:
         return self.model.fit(data_generator.get_training_batch(),
                               validation_data=data_generator.get_validation_batch(),
                               callbacks=callbacks_list,
-                            #   todo Remove, just to test
+                              #   todo Remove, just to test
                               steps_per_epoch=10,
                               validation_steps=6,
                               epochs=4)
-                            #   steps_per_epoch=self.config.steps_per_epoch,
-                            #   validation_steps=self.config.validation_steps,
-                            #   epochs=self.config.epochs)
+        #   steps_per_epoch=self.config.steps_per_epoch,
+        #   validation_steps=self.config.validation_steps,
+        #   epochs=self.config.epochs)
 
     def compile(self, optimizer="rmsprop"):
         # todo 选择更优的optimizer
+        # 自定义metric: PSNR SSIM
         self.model.compile(optimizer,
-                           loss="mae",
-                           metrics=["mae"])
-        # self.model.compile(optimizer,
-        #                    loss=self.loss,
-        #                    metrics=["mae"])
+                           loss=self.loss,
+                        #    metrics=[]
+                           )
         self.compiled = True
 
     def loss(self, y_true, y_pred):
-        # ? y_true和y_pred到底是什么
-        # print(y_true)
-        # print(type(y_true))
-        # print(y_pred)
-        # y_pred+1
+        coords = y_true[..., -1] == 1
+        y_true = tf.cast(y_true[..., :-1], tf.float32)
+
+        # 归一化
+        m = tf.reduce_max(y_true)
+        n = tf.reduce_min(y_true)
+        y_true = (y_true-n)/(m-n)
+
         squared_difference = tf.reduce_mean(
-            tf.square(tf.cast(y_true, tf.float32) - y_pred))
-        # print(y_pred.shape, y_true.shape)
+            tf.square(y_true[coords] - y_pred[coords]), axis=-1)
         return squared_difference
-        raise Exception("lalala")
-        pass
-        # return tf.reduce_mean(squared_difference, axis=-1)
 
     def predict(self, noisy_images):
         '''
