@@ -156,6 +156,7 @@ class Unet:
                           callbacks.ModelCheckpoint(
                               filepath="ckpt/best", monitor="val_loss", save_best_only=True, save_weights_only=True),
                           callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.3, patience=2, min_lr=0.00001)]
+        print("TRAINING BEGINS".center(40,'-'))
         print(f"steps_per_epoch: {self.config.steps_per_epoch}")
         return self.model.fit(data_generator.get_training_batch(),
                               validation_data=data_generator.get_validation_batch(),
@@ -250,6 +251,8 @@ class Unet:
             - ssim, psnr: between restored image and ground truth
             - old_ssim, old_psnr: between noisy image and ground truth
         '''
+        print("EVALUATION BEGINS".center(40,'-'))
+        assert os.path.isdir(os.path.dirname(save_path)), "The directory of save_path doesn't exist"
         SSIM, PSNR, OLD_SSIM, OLD_PSNR = [], [], [], []
         restored = []
 
@@ -261,7 +264,6 @@ class Unet:
                 self._save_images(restored, save_path, file_number)
                 file_number += 1
                 continue
-            print(counter)
             counter += 1
             begin = time.time()
 
@@ -293,10 +295,10 @@ class Unet:
             if save_path:
                 restored.append(restored_image)
 
-        SSIM = np.mean(SSIM)
-        PSNR = np.mean(PSNR)
-        OLD_SSIM = np.mean(OLD_PSNR)
-        OLD_PSNR = np.mean(OLD_SSIM)
+        SSIM = np.mean(SSIM).round(2)
+        PSNR = np.mean(PSNR).round(2)
+        OLD_SSIM = np.mean(OLD_PSNR).round(2)
+        OLD_PSNR = np.mean(OLD_SSIM).round(2)
         duration = np.round(duration/counter/batch_size, 1)
         result = {"duration": duration, "ssim": SSIM, "psnr": PSNR,
                   "old_ssim": OLD_SSIM, "old_psnr": OLD_PSNR}

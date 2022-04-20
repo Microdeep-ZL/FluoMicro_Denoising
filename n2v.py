@@ -146,6 +146,7 @@ class N2VDataGenerator:
             noisy_images: (batch_size, height, width, channels)
             clean_images: (batch_size, height, width, channels)
         '''
+
         noisy_clean_generator = self._get_noisy_clean()
         while 1:
             try:
@@ -172,6 +173,13 @@ class N2VDataGenerator:
         '''
         noisy_paths=self.config.file_paths
         clean_paths=self.config.ground_truth_paths
+        images_total=0
+        for i in range(len(noisy_paths)):
+            with Image.open(noisy_paths[i]) as noisy_image:
+                with Image.open(clean_paths[i]) as clean_image:
+                    images_total+=noisy_image.n_frames
+                    assert noisy_image.n_frames==clean_image.n_frames, "The number of noisy and clean images must be equal"
+        counter=0
         for i in range(len(noisy_paths)):
             with Image.open(noisy_paths[i]) as noisy_image:
                 with Image.open(clean_paths[i]) as clean_image:
@@ -188,6 +196,8 @@ class N2VDataGenerator:
                             noisy = self._normalization(noisy)
                             clean = self._normalization(clean)
                             yield noisy, clean
+                            counter+=1
+                            print(f"{counter}/{images_total} images have been processed", end="\r")
             raise RuntimeError("The current file has ended, please save a new tif file for the restored images")
 
     def _load_images(self, validation=False):
