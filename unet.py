@@ -156,20 +156,18 @@ class Unet:
                           callbacks.ModelCheckpoint(
                               filepath="ckpt/best", monitor="val_loss", save_best_only=True, save_weights_only=True),
                           callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.3, patience=2, min_lr=0.00001)]
-        print("TRAINING BEGINS".center(40,'-'))
-        print(f"steps_per_epoch: {self.config.steps_per_epoch}")
+        print("TRAINING BEGINS".center(40, '-'))
         return self.model.fit(data_generator.get_training_batch(),
                               validation_data=data_generator.get_validation_batch(),
                               callbacks=callbacks_list,
-                              #   epochs=self.config.epochs)
+                              steps_per_epoch=self.config.steps_per_epoch,
+                              validation_steps=self.config.validation_steps,
+                              epochs=self.config.epochs)
 
-                              #   todo Remove, just to test
-                              steps_per_epoch=10,
-                              validation_steps=6,
-                              epochs=4)
-
-        #   steps_per_epoch=self.config.steps_per_epoch,
-        #   validation_steps=self.config.validation_steps,
+        #   #   todo Remove, just to test
+        #   steps_per_epoch=10,
+        #   validation_steps=6,
+        #   epochs=4)
 
     def compile(self, optimizer="rmsprop"):
         # todo 选择更优的optimizer
@@ -251,8 +249,9 @@ class Unet:
             - ssim, psnr: between restored image and ground truth
             - old_ssim, old_psnr: between noisy image and ground truth
         '''
-        print("EVALUATION BEGINS".center(40,'-'))
-        assert os.path.isdir(os.path.dirname(save_path)), "The directory of save_path doesn't exist"
+        print("EVALUATION BEGINS".center(40, '-'))
+        assert os.path.isdir(os.path.dirname(save_path)
+                             ), "The directory of save_path doesn't exist"
         SSIM, PSNR, OLD_SSIM, OLD_PSNR = [], [], [], []
         restored = []
 

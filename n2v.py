@@ -126,19 +126,19 @@ class N2VDataGenerator:
         '''
         patch_target_generator = self._get_patch_target(validation)
         while 1:
-            try:
-                patches, targets = [], []
-                for _ in range(self.config.patches_per_batch):
-                    patch, target = next(patch_target_generator)
-                    patches.append(patch)
-                    targets.append(target)
-            except RuntimeError:
-                break
-            finally:
-                if patches:
-                    patches = np.concatenate(patches)
-                    targets = np.concatenate(targets)
-                    yield patches, targets
+        # try:
+            patches, targets = [], []
+            for _ in range(self.config.patches_per_batch):
+                patch, target = next(patch_target_generator)
+                patches.append(patch)
+                targets.append(target)
+        # except RuntimeError:
+        #     break
+        # finally:
+        # if patches:
+            patches = np.concatenate(patches)
+            targets = np.concatenate(targets)
+            yield patches, targets
 
     def get_evaluation_data(self, batch_size=1):
         '''
@@ -157,8 +157,8 @@ class N2VDataGenerator:
                     clean_images.append(clean)   
             except StopIteration:
                 break
-            except RuntimeError:
-                yield None, None
+            # except RuntimeError:
+            #     yield None, None
             finally:
                 if noisy_images:
                     noisy_images = np.concatenate(noisy_images)
@@ -198,24 +198,25 @@ class N2VDataGenerator:
                             yield noisy, clean
                             counter+=1
                             print(f"{counter}/{images_total} images have been processed", end="\r")
-            raise RuntimeError("The current file has ended, please save a new tif file for the restored images")
+        print()
 
     def _load_images(self, validation=False):
         '''Return image array (height, width) or (height, width, channels), depending on the image.'''
-        for file_path in self.config.file_paths:
-            with Image.open(file_path) as image:
-                # 随机打乱图片的顺序
-                for i in self._shuffle_range(image.n_frames):
-                    if validation == (i in self.is_validation.get(file_path, [])):
-                        image.seek(i)
-                        # yield np.array(image)
-                        yield np.array(image).astype("float32")
+        while 1:
+            for file_path in self.config.file_paths:
+                with Image.open(file_path) as image:
+                    # 随机打乱图片的顺序
+                    for i in self._shuffle_range(image.n_frames):
+                        if validation == (i in self.is_validation.get(file_path, [])):
+                            image.seek(i)
+                            # yield np.array(image)
+                            yield np.array(image).astype("float32")
 
-                        if self.config.data_augmentation:
-                            for j in self._shuffle_range(7)[:self.config.data_augmentation]:
-                                transposed_image = image.transpose(j)
-                                # yield np.array(transposed_image)
-                                yield np.array(transposed_image).astype("float32")
+                            if self.config.data_augmentation:
+                                for j in self._shuffle_range(7)[:self.config.data_augmentation]:
+                                    transposed_image = image.transpose(j)
+                                    # yield np.array(transposed_image)
+                                    yield np.array(transposed_image).astype("float32")
 
     def _normalization(self, image):
         '''Return the image array normalized to 01 interval'''
