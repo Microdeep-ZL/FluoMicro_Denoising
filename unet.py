@@ -261,6 +261,7 @@ class Unet:
         for x, y in data_generator.get_evaluation_data(batch_size):
             if x is None:
                 self._save_images(restored, save_path, file_number)
+                restored=[]
                 file_number += 1
                 continue
             counter += 1
