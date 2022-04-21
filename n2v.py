@@ -153,6 +153,9 @@ class N2VDataGenerator:
                 noisy_images, clean_images = [], []
                 for _ in range(batch_size):
                     noisy, clean = next(noisy_clean_generator)
+                    if noisy is None:
+                        yield None, None
+                        break
                     noisy_images.append(noisy)
                     clean_images.append(clean)   
             except StopIteration:
@@ -198,6 +201,7 @@ class N2VDataGenerator:
                             yield noisy, clean
                             counter+=1
                             print(f"{counter}/{images_total} images have been processed", end="\r")
+            yield None, None
         print()
 
     def _load_images(self, validation=False):
