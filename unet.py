@@ -139,11 +139,13 @@ class Unet:
 
         return Model(inputs, outputs)
 
-    def train(self, data_generator):
+    def train(self, data_generator, early_stopping_patience=5, reduce_lr_on_plateau_patience=3):
         '''
         Parameter
         -
-        data_generator: N2VDataGenerator instance
+        - data_generator: N2VDataGenerator instance
+        - early_stopping_patience: argument for callback EarlyStopping
+        - reduce_on_plateau_patience: argument for callback ReduceLROnPlateau
         '''
         if not self.compiled:
             self.compile()
@@ -152,10 +154,10 @@ class Unet:
 
         callbacks_list = [callbacks.TensorBoard(log_dir="tensorboard"),
                           callbacks.EarlyStopping(
-                              monitor="val_loss", patience=3),
+                              monitor="val_loss", patience=early_stopping_patience),
                           callbacks.ModelCheckpoint(
                               filepath="ckpt/best", monitor="val_loss", save_best_only=True, save_weights_only=True),
-                          callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.3, patience=2, min_lr=0.00001)]
+                          callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.3, patience=reduce_lr_on_plateau_patience, min_lr=0.00001)]
         print("TRAINING BEGINS".center(40, '-'))
         return self.model.fit(data_generator.get_training_batch(),
                               validation_data=data_generator.get_validation_batch(),
@@ -214,54 +216,25 @@ class Unet:
             tf.square(y_true[coords] - y_pred[coords]), axis=-1)
         return squared_difference
 
-    def predict(self, noisy_images=None):
+    def predict(self, data_generator, save_dir, divide=1, batch_size = 1):
         '''
-        Return denoised images of shape (batch_size, height, width, channels)
-        The image will be normalized into 01 interval.
+        The denoised image will be saved in tif file type and uint8 format.
 
         Parameter
         ---
-        - data_generator: Pass ``???
-        - noisy_images: (batch_size, height, width, channels) dtype=float32
+        - data_generator: Pass the `file_paths` and `RGB` arguments to N2VDataGenerator.
+        - save_dir: see doc for `evaluate()` 
+        - divide: see doc for `evaluate()` 
+        - batch_size: see doc for `evaluate()` 
         '''
-        # todo
-        if noisy_images:
-            pass
-        else:
-            pass
-        pass
-
-    def evaluate(self, data_generator, divide=1, save_path=None):
-        '''
-        Parameter
-        ---
-        - data_generator: Pass the `file_paths` and `ground_truth_paths` arguments to N2VDataGenerator.
-        - divide: Integer, defaults to 1. When predicting or evaluating, large images might lead to OOM (out of memory).
-            In that case, you can divide a large image into multiple smaller patches. 
-            For example, 2 means the model will process 4 smaller images, and then combine them together.
-        - save_path: String, path to save the restored result. The model won't save restored images by default.
-            For now, only support tif file type and uint8 format.
-
-        Return
-        --- 
-        Dict whose keys include `duration`, `ssim`, `psnr`, `old_ssim`, `old_psnr`
-            - duration: how many seconds it needs to process one image
-            - ssim, psnr: between restored image and ground truth
-            - old_ssim, old_psnr: between noisy image and ground truth
-        '''
-        print("EVALUATION BEGINS".center(40, '-'))
-        assert os.path.isdir(os.path.dirname(save_path)
-                             ), "The directory of save_path doesn't exist"
-        SSIM, PSNR, OLD_SSIM, OLD_PSNR = [], [], [], []
+        print("PREDICTION BEGINS".center(40, '-'))
         restored = []
-
         counter, duration = 0, 0
-        batch_size = 1
         file_number = 0
-        for x, y in data_generator.get_evaluation_data(batch_size):
+        for x in data_generator.get_prediction_data(batch_size):
             if x is None:
-                self._save_images(restored, save_path, file_number)
-                restored=[]
+                self._save_images(restored, save_dir, file_number)
+                restored = []
                 file_number += 1
                 continue
             counter += 1
@@ -277,8 +250,61 @@ class Unet:
                 j_step = ceil(x.shape[2]/divide)
                 for i in range(divide):
                     for j in range(divide):
-                        # restored_image[:, i:i+i_step, j:j+j_step, :] = self.model.predict_on_batch(
-                        #     x[:, i:i+i_step, j:j+j_step, :])
+                        restored_image[:, i*i_step:(i+1)*i_step, j*j_step:(j+1)*j_step, :] = self.model.predict_on_batch(
+                            x[:, i*i_step:(i+1)*i_step, j*j_step:(j+1)*j_step, :])
+
+            duration += time.time()-begin
+
+
+            restored.append(restored_image)
+
+        duration = np.round(duration/counter/batch_size, 1)
+        print(f"{duration}s on average to process each image")
+
+    def evaluate(self, data_generator, save_dir=None, divide=1, batch_size = 1):
+        '''
+        Parameter
+        ---
+        - data_generator: Pass the `file_paths` and `ground_truth_paths` arguments to N2VDataGenerator.
+        - divide: Integer, defaults to 1. When predicting or evaluating, large images might lead to OOM (out of memory).
+            In that case, you can divide a large image into multiple smaller patches. 
+            For example, 2 means the model will process 4 smaller images, and then combine them together.
+        - save_dir: String, path to save the restored result. The model won't save restored images by default.
+            For now, only support tif file type and uint8 format.
+        - batch_size: Integer, the number of images to be processed in each batch. Defaults to 1
+
+        Return
+        --- 
+        Dict whose keys include `duration`, `ssim`, `psnr`, `old_ssim`, `old_psnr`
+            - duration: how many seconds it needs to process one image
+            - ssim, psnr: between restored image and ground truth
+            - old_ssim, old_psnr: between noisy image and ground truth
+        '''
+        print("EVALUATION BEGINS".center(40, '-'))
+        SSIM, PSNR, OLD_SSIM, OLD_PSNR = [], [], [], []
+        restored = []
+        counter, duration = 0, 0
+        
+        file_number = 0
+        for x, y in data_generator.get_evaluation_data(batch_size):
+            if x is None:
+                self._save_images(restored, save_dir, file_number)
+                restored = []
+                file_number += 1
+                continue
+            counter += 1
+            begin = time.time()
+
+            # 可能OOM，则需要拆分处理，再拼合图像。拼合时需要考虑边界
+            if divide == 1:
+                restored_image = self.model.predict_on_batch(x)
+            else:
+                restored_image = np.zeros_like(x)
+                # 如果不能除尽，则要向上取整，保证每个像素点都被取到
+                i_step = ceil(x.shape[1]/divide)
+                j_step = ceil(x.shape[2]/divide)
+                for i in range(divide):
+                    for j in range(divide):
                         restored_image[:, i*i_step:(i+1)*i_step, j*j_step:(j+1)*j_step, :] = self.model.predict_on_batch(
                             x[:, i*i_step:(i+1)*i_step, j*j_step:(j+1)*j_step, :])
 
@@ -292,22 +318,22 @@ class Unet:
             PSNR.append(new_psnr)
             OLD_SSIM.append(old_ssim)
             OLD_PSNR.append(old_psnr)
-            if save_path:
+            if save_dir:
                 restored.append(restored_image)
 
         SSIM = np.mean(SSIM).round(2)
         PSNR = np.mean(PSNR).round(2)
-        OLD_SSIM = np.mean(OLD_PSNR).round(2)
-        OLD_PSNR = np.mean(OLD_SSIM).round(2)
+        OLD_SSIM = np.mean(OLD_SSIM).round(2)
+        OLD_PSNR = np.mean(OLD_PSNR).round(2)
         duration = np.round(duration/counter/batch_size, 1)
         result = {"duration": duration, "ssim": SSIM, "psnr": PSNR,
                   "old_ssim": OLD_SSIM, "old_psnr": OLD_PSNR}
 
         return result
 
-    def _save_images(self, restored, save_path, file_number):
+    def _save_images(self, restored, save_dir, file_number):
         # 输入文件有多少个，输出文件就应该有多少个
-        if save_path:
+        if save_dir:
             restored = np.concatenate(restored)
             # 保存为uint8
             # todo 保存100张图片时，也可能会OOM
@@ -319,50 +345,7 @@ class Unet:
             except ValueError:
                 pass
 
-            dirname = os.path.dirname(save_path)
-            basename = os.path.basename(save_path)
-            file_name = os.path.splitext(basename)[0]+"_"+str(file_number)
-            suffix = os.path.splitext(basename)[1]
-            save_path = os.path.join(dirname, file_name+suffix)
-
+            if not os.path.isdir(save_dir): os.makedirs(save_dir)
+            file_name = f"restored_{file_number}.tif"
+            save_path = os.path.join(save_dir, file_name)
             io.imsave(save_path, restored)
-            # tif.save(save_path, format="TIFF", save_all=True)
-
-    # def divide_patches(self, image, divide):
-    #     '''
-    #     Return smaller patches of image
-
-    #     Parameter
-    #     ---
-    #     - image: (batch_size, height, width, channels)
-    #     - divide: integer
-    #     '''
-    #     assert image.shape[0]==1, 'Please set `batch_size` to 1 before trying to divide patches'
-    #     if divide==1:
-    #         return [image]
-    #     else:
-    #         # 如果不能除尽，则要
-    #         i_step=ceil(image.shape[1]/divide)
-    #         j_step=ceil(image.shape[2]/divide)
-    #         for i in range(divide):
-    #             for j in range(divide):
-    #                 yield image[:,i:i+i_step,j:j+j_step,:]
-
-    # def evaluate(self, noisy_images, clean_images):
-    #     '''
-    #     Parameter
-    #     ---
-    #     noisy_images: (batch_size, height, width, channels)
-    #     clean_images: (batch_size, height, width, channels)
-
-    #     Return
-    #     ---
-    #     (PSNR, SSIM)
-    #     PSNR: (batch_size,)
-    #     SSIM: (batch_size,)
-    #     '''
-    #     assert noisy_images.shape == clean_images.shape, 'noisy_images and clean_images must have the same shape'
-    #     denoised_images = self.predict(noisy_images)
-    #     psnr = tf.image.psnr(denoised_images, clean_images, 1)
-    #     ssim = tf.image.ssim(denoised_images, clean_images, 1)
-    #     return psnr, ssim

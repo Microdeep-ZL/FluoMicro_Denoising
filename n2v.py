@@ -33,7 +33,6 @@ class N2VConfig:
         if ground_truth_paths:
             assert len(file_paths)==len(ground_truth_paths), 'file_paths and ground_truth_paths must correspond to each other'
         self.file_paths = file_paths
-        # todo 怎么用config设置predict和evaluate的参数
         self.ground_truth_paths = ground_truth_paths
 
         self.RGB = RGB
@@ -140,33 +139,91 @@ class N2VDataGenerator:
             targets = np.concatenate(targets)
             yield patches, targets
 
+    def get_prediction_data(self, batch_size=1):
+        '''
+        Return noisy_images: (batch_size, height, width, channels)
+        '''
+        # 逻辑基本上和get_evaluation_data()一样，但是本方法写得更简单
+        def _get_image():
+            counter,images_total=0,0
+            for file_path in self.config.file_paths:
+                with Image.open(file_path) as image:
+                    images_total+=image.n_frames
+            for file_path in self.config.file_paths:
+                with Image.open(file_path) as image:
+                    for i in range(image.n_frames):
+                        image.seek(i)                    
+                        noisy= np.array(image).astype("float32")
+                        axis = 0 if self.config.RGB else (0,-1)
+                        noisy = np.expand_dims(noisy, axis)
+                        noisy = self._normalization(noisy)
+
+                        yield noisy
+                        counter+=1
+                        print(f"{counter}/{images_total} images have been processed",end="\r")
+                yield None # 提示一个tif文件已处理完
+            print()
+
+        images=[]
+        for image in _get_image():
+            if image is None:
+                if images:
+                    yield np.concatenate(images)
+                    images=[]
+                yield image
+            else:
+                images.append(image)
+                if len(images)==batch_size:
+                    yield np.concatenate(images)
+                    images=[]
+                
     def get_evaluation_data(self, batch_size=1):
         '''
         Return (noisy_images, clean_images)
             noisy_images: (batch_size, height, width, channels)
             clean_images: (batch_size, height, width, channels)
         '''
-
-        noisy_clean_generator = self._get_noisy_clean()
-        while 1:
-            try:
-                noisy_images, clean_images = [], []
-                for _ in range(batch_size):
-                    noisy, clean = next(noisy_clean_generator)
-                    if noisy is None:
-                        yield None, None
-                        break
-                    noisy_images.append(noisy)
-                    clean_images.append(clean)   
-            except StopIteration:
-                break
-            # except RuntimeError:
-            #     yield None, None
-            finally:
+        noisy_images, clean_images = [], []
+        for noisy, clean in self._get_noisy_clean():
+            if noisy is None:
                 if noisy_images:
                     noisy_images = np.concatenate(noisy_images)
                     clean_images = np.concatenate(clean_images)
                     yield noisy_images, clean_images
+                    noisy_images, clean_images = [], []
+                yield None, None
+            else:
+                noisy_images.append(noisy)
+                clean_images.append(clean)
+                if len(noisy_images)==batch_size:
+                    noisy_images = np.concatenate(noisy_images)
+                    clean_images = np.concatenate(clean_images)
+                    yield noisy_images, clean_images                
+                    noisy_images, clean_images = [], []                
+
+        # noisy_clean_generator = self._get_noisy_clean()
+        # while 1:
+        #     try:
+        #         noisy_images, clean_images = [], []
+        #         for _ in range(batch_size):
+        #             noisy, clean = next(noisy_clean_generator)
+        #             if noisy is None:
+        #                 if noisy_images:
+        #                     noisy_images = np.concatenate(noisy_images)
+        #                     clean_images = np.concatenate(clean_images)
+        #                     yield noisy_images, clean_images
+
+        #                 yield None, None
+        #                 break
+        #             noisy_images.append(noisy)
+        #             clean_images.append(clean)   
+        #     except StopIteration:
+        #         break
+        #     finally:
+        #         if noisy_images:
+        #             noisy_images = np.concatenate(noisy_images)
+        #             clean_images = np.concatenate(clean_images)
+        #             yield noisy_images, clean_images
 
     def _get_noisy_clean(self):
         '''
@@ -174,6 +231,7 @@ class N2VDataGenerator:
             noisy_image: (1, height, width, channels)
             clean_image: (1, height, width, channels)
         '''
+        assert self.config.ground_truth_paths is not None, "You have to pass the `ground_truth_paths` argument to N2VDataGenerator"
         noisy_paths=self.config.file_paths
         clean_paths=self.config.ground_truth_paths
         images_total=0
