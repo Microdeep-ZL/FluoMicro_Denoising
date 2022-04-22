@@ -35,7 +35,7 @@ class Unet:
         self.model = self.define_model()
         if model_summary:
             self.model.summary()
-            plot_model(self.model, 'Unet.png', show_shapes=True)
+            plot_model(self.model, type(self).__name__+".png", show_shapes=True)
 
         self.compiled = False
 
@@ -120,8 +120,7 @@ class Unet:
             else:
                 expanding[i] = expanding[i](expanding[i-1])
 
-            # ? 之前还好好的，为什么现在会报错, 噢，之前显式地指出了input_shape为（128，128，1）
-            # 而现在是(None, None, 1)
+            
             # _, height_contracting, width_contracting, _ = contracting[-i-2].shape
             # _, height_expanding, width_expanding, _ = expanding[i].shape
             # height_crop = (height_contracting-height_expanding)//2
@@ -136,6 +135,7 @@ class Unet:
                 [expanding[i], contracting[-i-2]])
 
         outputs = ending(expanding[-1])
+        outputs=layers.add([outputs,inputs]) # Residual connection
 
         return Model(inputs, outputs)
 
