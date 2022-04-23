@@ -282,10 +282,42 @@ class N2VDataGenerator:
 
     def _normalization(self, image):
         '''Return the image array normalized to 01 interval'''
+        # test 调整亮度对比度，作为预处理的步骤之一
+        histogram=np.sort(image.flatten())
+        percent_left=0.02
+        percent_right=0.004    
+        low=histogram[int(percent_left*len(histogram))]
+        high=histogram[-int(percent_right*len(histogram))]
+        image=np.clip(image,low,high)
         m = image.max()
         n = image.min()
-        image = (image-n)/(m-n)
-        return image
+        return (image-n)/(m-n)
+
+    # def _normalization(self, image, mode=""):
+    #     '''
+    #     Parameter
+    #     -
+    #     mode: One of `z_score`, `zero_one`, 
+
+    #     Return the image array normalized to 01 interval
+    #     '''
+    #     # todo 其他normalization方法
+    #     # percentile
+    #     # mean
+    #     # Gaussian
+    #     # baseline?
+    #     #  
+    #     def z_score():
+    #         mean=image.mean()
+    #         std=np.std(image, ddof=1)
+    #         image=(image-mean)/std
+    #     def zero_one():
+    #         m = image.max()
+    #         n = image.min()
+    #         image = (image-n)/(m-n)
+        
+
+    #     return eval(mode+"(image)")
 
     def _get_patch_target(self, validation=False):
         '''
