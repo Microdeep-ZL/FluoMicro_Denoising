@@ -272,25 +272,29 @@ class N2VDataGenerator:
                         if validation == (i in self.is_validation.get(file_path, [])):
                             image.seek(i)
                             # yield np.array(image)
-                            yield np.array(image).astype("float32")
+                            yield self._image_to_array(image)
 
-                            if self.config.data_augmentation:
-                                for j in self._shuffle_range(7)[:self.config.data_augmentation]:
-                                    transposed_image = image.transpose(j)
-                                    # yield np.array(transposed_image)
-                                    yield np.array(transposed_image).astype("float32")
+                            for j in self._shuffle_range(7)[:self.config.data_augmentation]:
+                                transposed_image = image.transpose(j)
+                                # yield np.array(transposed_image)
+                                yield self._image_to_array(transposed_image)
 
-    def _normalization(self, image):
+    def _image_to_array(self,image):
+        array=np.array(image).astype("float32")
+        # Uniform distribution [0.0001, 0.02) and [0.0001, 0.004)
+        # todo Not sure to add this feature in training 
+        percent_left=np.random.ranf()*(0.02-0.0001)+0.0001
+        percent_right=np.random.ranf()*(0.004-0.0001)+0.0001
+        array=self._normalization(array,percent_left,percent_right)
+        return array
+
+    def _normalization(self, image, percent_left=0.02, percent_right=0.004):
         '''Return the image array normalized to 01 interval'''
         # test 调整亮度对比度，作为预处理的步骤之一
         histogram=np.sort(image.flatten())
-        percent_left=0.02
-        percent_right=0.004    
-        low=histogram[int(percent_left*len(histogram))]
-        high=histogram[-int(percent_right*len(histogram))]
-        image=np.clip(image,low,high)
-        m = image.max()
-        n = image.min()
+        n=histogram[int(percent_left*len(histogram))]
+        m=histogram[-int(percent_right*len(histogram))]
+        image=np.clip(image,n,m)
         return (image-n)/(m-n)
 
     # def _normalization(self, image, mode=""):
@@ -328,7 +332,7 @@ class N2VDataGenerator:
         image_generator = self._load_images(validation)
         while 1:
             image = next(image_generator)
-            image = self._normalization(image)
+            # image = self._normalization(image)
 
             image_shape = image.shape
             patch_shape = self.config.patch_shape
