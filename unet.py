@@ -1,4 +1,4 @@
-from tensorflow.keras import layers, models, Model, Input, callbacks
+from tensorflow.keras import layers, models, Model, Input, callbacks, optimizers
 from tensorflow.keras.utils import plot_model
 import tensorflow as tf
 import time
@@ -139,13 +139,14 @@ class Unet:
 
         return Model(inputs, outputs)
 
-    def train(self, data_generator, early_stopping_patience=5, reduce_lr_on_plateau_patience=3):
+    def train(self, data_generator, early_stopping_patience=10, reduce_lr_patience=5, reduce_lr_factor=0.7):
         '''
         Parameter
         -
         - data_generator: N2VDataGenerator instance
         - early_stopping_patience: argument for callback EarlyStopping
-        - reduce_on_plateau_patience: argument for callback ReduceLROnPlateau
+        - reduce_lr_patience: argument for callback ReduceLROnPlateau
+        - reduce_lr_factor: argument for callback ReduceLROnPlateau
         '''
         if not self.compiled:
             self.compile()
@@ -157,7 +158,7 @@ class Unet:
                               monitor="val_loss", patience=early_stopping_patience),
                           callbacks.ModelCheckpoint(
                               filepath="ckpt/best", monitor="val_loss", save_best_only=True, save_weights_only=True),
-                          callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.3, patience=reduce_lr_on_plateau_patience, min_lr=0.00001)]
+                          callbacks.ReduceLROnPlateau(monitor='val_loss', factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.00005)]
         print("TRAINING BEGINS".center(40, '-'))
         return self.model.fit(data_generator.get_training_batch(),
                               validation_data=data_generator.get_validation_batch(),
@@ -171,9 +172,11 @@ class Unet:
         #   validation_steps=6,
         #   epochs=4)
 
-    def compile(self, optimizer="rmsprop"):
+    def compile(self):
         # todo 选择更优的optimizer
+        # 选择更优的参数 
         # 训练过程不计算PSNR和SSIM
+        optimizer=optimizers.RMSprop(momentum=0.1)
         self.model.compile(optimizer, loss=self.loss)
         self.compiled = True
 
