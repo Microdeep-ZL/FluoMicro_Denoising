@@ -324,10 +324,10 @@ class Unet:
             if save_dir:
                 restored.append(restored_image)
 
-        SSIM = np.mean(SSIM).round(2)
-        PSNR = np.mean(PSNR).round(2)
-        OLD_SSIM = np.mean(OLD_SSIM).round(2)
-        OLD_PSNR = np.mean(OLD_PSNR).round(2)
+        # SSIM = np.mean(SSIM).round(2)
+        # PSNR = np.mean(PSNR).round(2)
+        # OLD_SSIM = np.mean(OLD_SSIM).round(2)
+        # OLD_PSNR = np.mean(OLD_PSNR).round(2)
         duration = np.round(duration/counter/batch_size, 1)
         result = {"duration": duration, "ssim": SSIM, "psnr": PSNR,
                   "old_ssim": OLD_SSIM, "old_psnr": OLD_PSNR}
