@@ -30,16 +30,16 @@ class Unet:
     ---
     model_summary: Bool. Defaults to False. Whether to print model summary and plot the topograhpy.'''
 
-    def __init__(self, config, model_summary=False):
+    def __init__(self, config, n_depth=3, model_summary=False):
         self.config = config
-        self.model = self.define_model()
+        self.model = self.define_model(n_depth)
         if model_summary:
             self.model.summary()
             plot_model(self.model, type(self).__name__+".png", show_shapes=True)
 
         self.compiled = False
 
-    def define_model(self, n_depth=2):
+    def define_model(self, n_depth):
         '''
         Assume the image has shape (height, width, channels)
         Parameters
@@ -140,7 +140,7 @@ class Unet:
         # outputs=layers.Add(name="residual")([outputs,inputs])
         return Model(inputs, outputs)
 
-    def train(self, data_generator, early_stopping_patience=10, reduce_lr_patience=5, reduce_lr_factor=0.7):
+    def train(self, data_generator, early_stopping_patience=5, reduce_lr_patience=2, reduce_lr_factor=0.7):
         '''
         Parameter
         -
@@ -150,7 +150,7 @@ class Unet:
         - reduce_lr_factor: argument for callback ReduceLROnPlateau
         '''
         if not self.compiled:
-            self.compile()
+            self.compile(learning_rate=0.0005, momentum=0.1)
         # x, y=next(data_generator)
         # return self.model.fit(x,y,batch_size=32,epochs=1)
 
@@ -168,11 +168,11 @@ class Unet:
                               validation_steps=self.config.validation_steps,
                               epochs=self.config.epochs)
 
-    def compile(self):
+    def compile(self, learning_rate, mometum):
         # todo 选择更优的optimizer
         # 选择更优的参数 
         # 训练过程不计算PSNR和SSIM
-        optimizer=optimizers.RMSprop(momentum=0.1)
+        optimizer=optimizers.RMSprop(learning_rate, momentum=mometum)
         self.model.compile(optimizer, loss=self.loss)
         self.compiled = True
 

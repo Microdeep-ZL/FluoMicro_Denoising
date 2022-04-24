@@ -9,7 +9,7 @@ class N2VConfig:
                  patch_shape=(64, 64),
                  patches_per_batch=32,
                  epochs=20,
-                 perc_pix=0.74,
+                 perc_pix=0.25,
                  data_augmentation=True,
                  conv="SeparableConv2D",
                  RGB=False,
@@ -22,6 +22,9 @@ class N2VConfig:
         - ground_truth_paths: a list of tif file paths (clean images, not for training, only for evaluation)
             Note that `file_paths` and `ground_truth_paths` should correspond to each other
         - patch_shape: the shape of patch. Default (64, 64)
+        - perc_pix: Float. Percentage of pixels to be manipulated. 
+            eg. 0.25 means an image of size (100, 100) will have 0.25% ie. 25 pixels manipulated.
+            Or equivently every subpatch of size (20, 20) has a pixel manipulated where 20=sqrt(1/0.0025)
         - validation_split: the percentage of validation set from the whole dataset        
         - conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
         - RGB: Whether the image is RGB or gray. Defaults to False. 
@@ -256,8 +259,7 @@ class N2VDataGenerator:
 
     def _image_to_array(self,image):
         array=np.array(image).astype("float32")
-        # Uniform distribution [0.0001, 0.02) and [0.0001, 0.004)
-        # todo Not sure to add this feature in training 
+        # Uniform distribution [0.00002, 0.0001) and [0.00005, 0.0004)
         percent_left=np.random.ranf()*(0.0001-0.00002)+0.00002
         percent_right=np.random.ranf()*(0.0004-0.00005)+0.00005
         array=self._normalization(array,percent_left,percent_right)
