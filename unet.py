@@ -30,8 +30,14 @@ class Unet:
     ---
     model_summary: Bool. Defaults to False. Whether to print model summary and plot the topograhpy.'''
 
-    def __init__(self, config, n_depth=3, model_summary=False):
+    def __init__(self, config, n_depth=3, conv="SeparableConv2D", model_summary=False):
+        '''
+        Parameter
+        -
+        - conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
+        '''
         self.config = config
+        self.Conv2D = layers.Conv2D if conv == "Conv2D" else layers.SeparableConv2D
         self.model = self.define_model(n_depth)
         if model_summary:
             self.model.summary()
@@ -62,12 +68,12 @@ class Unet:
                 block.add(layers.MaxPooling2D())
 
             # 第一个卷积层含64个filters，最后一个卷积层含256个filters
-            block.add(self.config.Conv2D(
+            block.add(self.Conv2D(
                 2**(i+6), 3, use_bias=False, padding='same'))
             block.add(layers.BatchNormalization())
             block.add(layers.Activation("relu"))
 
-            block.add(self.config.Conv2D(
+            block.add(self.Conv2D(
                 2**(i+6), 3, use_bias=False, padding='same'))
             block.add(layers.BatchNormalization())
             block.add(layers.Activation("relu"))
@@ -78,12 +84,12 @@ class Unet:
             block = models.Sequential(name='expanding_'+str(i))
             if i != 0:
                 # 唯一的卷积层含128个filters
-                block.add(self.config.Conv2D(2**(6+n_depth-i),
+                block.add(self.Conv2D(2**(6+n_depth-i),
                           3, use_bias=False, padding='same'))
                 block.add(layers.BatchNormalization())
                 block.add(layers.Activation("relu"))
 
-                block.add(self.config.Conv2D(2**(6+n_depth-i),
+                block.add(self.Conv2D(2**(6+n_depth-i),
                           3, use_bias=False, padding='same'))
                 block.add(layers.BatchNormalization())
                 block.add(layers.Activation("relu"))
@@ -92,11 +98,11 @@ class Unet:
             expanding.append(block)
 
         ending = models.Sequential([
-            self.config.Conv2D(2**6, 3, use_bias=False, padding='same'),
+            self.Conv2D(2**6, 3, use_bias=False, padding='same'),
             layers.BatchNormalization(),
             layers.Activation("relu"),
 
-            self.config.Conv2D(2**6, 3, use_bias=False, padding='same'),
+            self.Conv2D(2**6, 3, use_bias=False, padding='same'),
             layers.BatchNormalization(),
             layers.Activation("relu"),
             # todo 最终的单点预测输出
@@ -154,7 +160,7 @@ class Unet:
             self.compile()
         # x, y=next(data_generator)
         # return self.model.fit(x,y,batch_size=32,epochs=1)
-        if self.config.ground_truth_paths:
+        if self.config.validation_split:
             monitor="val_loss"
         else:
             monitor="loss"
