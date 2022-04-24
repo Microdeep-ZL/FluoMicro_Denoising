@@ -103,7 +103,8 @@ class Unet:
             # todo 尺寸和原图相等, 已经做到了，但是和n2v的方法一样吗？
             # todo Noise2Void到底是怎么做的，还是得看源码和论文
             layers.Conv2D(1, 1),
-
+            # Normalize to 01 interval
+            Rescaling()
         ], name='ending')
 
         for i in range(len(contracting)):
@@ -133,9 +134,7 @@ class Unet:
                 [expanding[i], contracting[-i-2]])
 
         outputs = ending(expanding[-1])
-        outputs=layers.Add(name="residual")([outputs,inputs])
-        # Normalize to 01 interval in the end
-        outputs=Rescaling()(outputs)
+        # outputs=layers.Add(name="residual")([outputs,inputs])
         return Model(inputs, outputs)
 
     def train(self, data_generator, early_stopping_patience=10, reduce_lr_patience=5, reduce_lr_factor=0.7):
