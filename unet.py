@@ -160,7 +160,7 @@ class Unet:
             self.compile(learning_rate=0.0005, momentum=0.1)
         # x, y=next(data_generator)
         # return self.model.fit(x,y,batch_size=32,epochs=1)
-        if self.config.ground_truth_paths:
+        if self.config.validation_split:
             monitor="val_loss"
         else:
             monitor="loss"

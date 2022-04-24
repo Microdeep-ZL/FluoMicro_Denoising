@@ -11,7 +11,6 @@ class N2VConfig:
                  epochs=20,
                  perc_pix=0.25,
                  data_augmentation=True,
-                 conv="SeparableConv2D",
                  RGB=False,
                  validation_split=0
                  ):
@@ -26,7 +25,6 @@ class N2VConfig:
             eg. 0.25 means an image of size (100, 100) will have 0.25% ie. 25 pixels manipulated.
             Or equivently every subpatch of size (20, 20) has a pixel manipulated where 20=sqrt(1/0.0025)
         - validation_split: the percentage of validation set from the whole dataset        
-        - conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
         - RGB: Whether the image is RGB or gray. Defaults to False. 
         - data_augmentation: Bool, True by default. If true, the image will be randomly flipped or rotated.
         '''
@@ -46,7 +44,6 @@ class N2VConfig:
         self.epochs = epochs
         self.perc_pix = perc_pix
         self.data_augmentation = data_augmentation
-        self.Conv2D = layers.Conv2D if conv == "Conv2D" else layers.SeparableConv2D
         self.validation_split = validation_split
 
     def set_steps_per_epoch(self, steps_per_epoch):
