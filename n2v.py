@@ -258,12 +258,12 @@ class N2VDataGenerator:
         array=np.array(image).astype("float32")
         # Uniform distribution [0.0001, 0.02) and [0.0001, 0.004)
         # todo Not sure to add this feature in training 
-        percent_left=np.random.ranf()*(0.02-0.0001)+0.0001
-        percent_right=np.random.ranf()*(0.004-0.0001)+0.0001
+        percent_left=np.random.ranf()*(0.0001-0.00002)+0.00002
+        percent_right=np.random.ranf()*(0.0004-0.00005)+0.00005
         array=self._normalization(array,percent_left,percent_right)
         return array
 
-    def _normalization(self, image, percent_left=0.02, percent_right=0.004):
+    def _normalization(self, image, percent_left=0, percent_right=0.00005):
         '''Return the image array normalized to 01 interval'''
         # test 调整亮度对比度，作为预处理的步骤之一
         histogram=np.sort(image.flatten())
