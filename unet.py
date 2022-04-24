@@ -140,12 +140,13 @@ class Unet:
         # outputs=layers.Add(name="residual")([outputs,inputs])
         return Model(inputs, outputs)
 
-    def train(self, data_generator, early_stopping_patience=5, reduce_lr_patience=2, reduce_lr_factor=0.7):
+    def train(self, data_generator, early_stopping_patience=5, restore_best_weights=True, reduce_lr_patience=2, reduce_lr_factor=0.7):
         '''
         Parameter
         -
         - data_generator: N2VDataGenerator instance
         - early_stopping_patience: argument for callback EarlyStopping
+        - restore_best_weights: argument for callback EarlyStopping
         - reduce_lr_patience: argument for callback ReduceLROnPlateau
         - reduce_lr_factor: argument for callback ReduceLROnPlateau
         '''
@@ -153,13 +154,16 @@ class Unet:
             self.compile(learning_rate=0.0005, momentum=0.1)
         # x, y=next(data_generator)
         # return self.model.fit(x,y,batch_size=32,epochs=1)
-
+        if self.config.ground_truth_paths:
+            monitor="val_loss"
+        else:
+            monitor="loss"
         callbacks_list = [callbacks.TensorBoard(log_dir="tensorboard"),
                           callbacks.EarlyStopping(
-                              monitor="val_loss", patience=early_stopping_patience),
+                              monitor=monitor, patience=early_stopping_patience, restore_best_weights=restore_best_weights),
                           callbacks.ModelCheckpoint(
-                              filepath="ckpt/best", monitor="val_loss", save_best_only=True, save_weights_only=True),
-                          callbacks.ReduceLROnPlateau(monitor='val_loss', factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.00005)]
+                              filepath="ckpt/best", monitor=monitor, save_best_only=True, save_weights_only=True),
+                          callbacks.ReduceLROnPlateau(monitor=monitor, factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.00005)]
         print("TRAINING BEGINS".center(40, '-'))
         return self.model.fit(data_generator.get_training_batch(),
                               validation_data=data_generator.get_validation_batch(),
