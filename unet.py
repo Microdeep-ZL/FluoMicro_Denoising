@@ -8,20 +8,20 @@ from math import ceil
 import os
 
 
-class Rescaling(layers.Layer):
-    '''
-    Rescale the image into 01 interval.
-    The built-in `tf.keras.layers.Rescaling()` couldn't work here, because it only receives fixed float arguments.
-    What we want is to rescale each image according to its maximum and minimum pixel values, rather than any fixed values.
-    '''
+# class Rescaling(layers.Layer):
+#     '''
+#     Rescale the image into 01 interval.
+#     The built-in `tf.keras.layers.Rescaling()` couldn't work here, because it only receives fixed float arguments.
+#     What we want is to rescale each image according to its maximum and minimum pixel values, rather than any fixed values.
+#     '''
 
-    def call(self, inputs):
-        inputs = tf.cast(inputs, dtype=tf.float32)
-        m = tf.reduce_max(inputs)
-        n = tf.reduce_min(inputs)
-        scale = 1/(m-n)
-        offset = -n/(m-n)
-        return inputs * scale + offset
+#     def call(self, inputs):
+#         inputs = tf.cast(inputs, dtype=tf.float32)
+#         m = tf.reduce_max(inputs)
+#         n = tf.reduce_min(inputs)
+#         scale = 1/(m-n)
+#         offset = -n/(m-n)
+#         return inputs * scale + offset
 
 
 class Unet:
@@ -104,7 +104,8 @@ class Unet:
             # todo Noise2Void到底是怎么做的，还是得看源码和论文
             layers.Conv2D(1, 1),
             # Normalize to 01 interval
-            Rescaling()
+            # Rescaling()
+
         ], name='ending')
 
         for i in range(len(contracting)):
@@ -134,6 +135,8 @@ class Unet:
                 [expanding[i], contracting[-i-2]])
 
         outputs = ending(expanding[-1])
+        # clip into 01 interval
+        outputs=tf.clip_by_value(outputs,0,1)
         # outputs=layers.Add(name="residual")([outputs,inputs])
         return Model(inputs, outputs)
 
