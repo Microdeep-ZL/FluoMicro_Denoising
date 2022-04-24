@@ -10,7 +10,7 @@ class N2VConfig:
                  patches_per_batch=32,
                  epochs=20,
                  perc_pix=0.74,
-                 data_augmentation=0,
+                 data_augmentation=False,
                  conv="SeparableConv2D",
                  RGB=False,
                  validation_split=0
@@ -25,8 +25,7 @@ class N2VConfig:
         - validation_split: the percentage of validation set from the whole dataset        
         - conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
         - RGB: Whether the image is RGB or gray. Defaults to False. 
-        - data_augmentation: Integer from 0-7, represents how many additional folds you want the training images to have. 
-            For example, 5 means the number of images will be multiplied by 6. Defaults to 0
+        - data_augmentation: Bool, False by default. If true, the image will be randomly flipped or rotated.
         '''
 
         assert patch_shape[0] % 2 == 0 and patch_shape[1] % 2 == 0, 'Patch shape must be divisible by 2'
@@ -107,9 +106,9 @@ class N2VDataGenerator:
                               self.config.patches_per_batch)
         validation_steps = int(validation_patches_total /
                                self.config.patches_per_batch)
-        if self.config.data_augmentation:
-            validation_steps *= self.config.data_augmentation + 1
-            steps_per_epoch *= self.config.data_augmentation + 1
+        # if self.config.data_augmentation:
+        #     validation_steps *= self.config.data_augmentation + 1
+        #     steps_per_epoch *= self.config.data_augmentation + 1
         self.config.set_steps_per_epoch(steps_per_epoch)
         self.config.set_validation_steps(validation_steps)
 
@@ -272,12 +271,12 @@ class N2VDataGenerator:
                         if validation == (i in self.is_validation.get(file_path, [])):
                             image.seek(i)
                             # yield np.array(image)
-                            yield self._image_to_array(image)
-
-                            for j in self._shuffle_range(7)[:self.config.data_augmentation]:
-                                transposed_image = image.transpose(j)
-                                # yield np.array(transposed_image)
+                            if self.config.data_augmentation and not validation:
+                                # 八分之一概率不做数据增强
+                                transposed_image = image.transpose(self._shuffle_range(7)[0]) if np.random.randint(8)==0 else image
                                 yield self._image_to_array(transposed_image)
+                            else:
+                                yield self._image_to_array(image)
 
     def _image_to_array(self,image):
         array=np.array(image).astype("float32")
