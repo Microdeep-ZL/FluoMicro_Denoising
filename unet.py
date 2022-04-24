@@ -48,6 +48,7 @@ class Unet:
                     If n_depth is too big, image of small size will not be properly processed
         '''
         inputs = Input(shape=self.config.input_shape)
+        # inputs = Input(shape=(128,128,1))
         # todo 当图块尺寸为奇数时，concatenate层报错
         # inputs = Input(shape=(567,567,1))
 
@@ -103,9 +104,6 @@ class Unet:
             # todo Noise2Void到底是怎么做的，还是得看源码和论文
             layers.Conv2D(1, 1),
 
-            # Normalize to 01 interval
-            Rescaling()
-
         ], name='ending')
 
         for i in range(len(contracting)):
@@ -135,8 +133,9 @@ class Unet:
                 [expanding[i], contracting[-i-2]])
 
         outputs = ending(expanding[-1])
-        outputs=layers.add([outputs,inputs]) # Residual connection
-
+        outputs=layers.Add(name="residual")([outputs,inputs])
+        # Normalize to 01 interval in the end
+        outputs=Rescaling()(outputs)
         return Model(inputs, outputs)
 
     def train(self, data_generator, early_stopping_patience=10, reduce_lr_patience=5, reduce_lr_factor=0.7):
@@ -166,11 +165,6 @@ class Unet:
                               steps_per_epoch=self.config.steps_per_epoch,
                               validation_steps=self.config.validation_steps,
                               epochs=self.config.epochs)
-
-        #   #   todo Remove, just to test
-        #   steps_per_epoch=10,
-        #   validation_steps=6,
-        #   epochs=4)
 
     def compile(self):
         # todo 选择更优的optimizer

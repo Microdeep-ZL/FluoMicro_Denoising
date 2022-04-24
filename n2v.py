@@ -10,7 +10,7 @@ class N2VConfig:
                  patches_per_batch=32,
                  epochs=20,
                  perc_pix=0.74,
-                 data_augmentation=False,
+                 data_augmentation=True,
                  conv="SeparableConv2D",
                  RGB=False,
                  validation_split=0
@@ -25,7 +25,7 @@ class N2VConfig:
         - validation_split: the percentage of validation set from the whole dataset        
         - conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
         - RGB: Whether the image is RGB or gray. Defaults to False. 
-        - data_augmentation: Bool, False by default. If true, the image will be randomly flipped or rotated.
+        - data_augmentation: Bool, True by default. If true, the image will be randomly flipped or rotated.
         '''
 
         assert patch_shape[0] % 2 == 0 and patch_shape[1] % 2 == 0, 'Patch shape must be divisible by 2'
@@ -200,30 +200,6 @@ class N2VDataGenerator:
                     yield noisy_images, clean_images                
                     noisy_images, clean_images = [], []                
 
-        # noisy_clean_generator = self._get_noisy_clean()
-        # while 1:
-        #     try:
-        #         noisy_images, clean_images = [], []
-        #         for _ in range(batch_size):
-        #             noisy, clean = next(noisy_clean_generator)
-        #             if noisy is None:
-        #                 if noisy_images:
-        #                     noisy_images = np.concatenate(noisy_images)
-        #                     clean_images = np.concatenate(clean_images)
-        #                     yield noisy_images, clean_images
-
-        #                 yield None, None
-        #                 break
-        #             noisy_images.append(noisy)
-        #             clean_images.append(clean)   
-        #     except StopIteration:
-        #         break
-        #     finally:
-        #         if noisy_images:
-        #             noisy_images = np.concatenate(noisy_images)
-        #             clean_images = np.concatenate(clean_images)
-        #             yield noisy_images, clean_images
-
     def _get_noisy_clean(self):
         '''
         Return (noisy_image, clean_image), float32, already normalized to 01 interval
@@ -295,32 +271,6 @@ class N2VDataGenerator:
         m=histogram[-int(percent_right*len(histogram))]
         image=np.clip(image,n,m)
         return (image-n)/(m-n)
-
-    # def _normalization(self, image, mode=""):
-    #     '''
-    #     Parameter
-    #     -
-    #     mode: One of `z_score`, `zero_one`, 
-
-    #     Return the image array normalized to 01 interval
-    #     '''
-    #     # todo 其他normalization方法
-    #     # percentile
-    #     # mean
-    #     # Gaussian
-    #     # baseline?
-    #     #  
-    #     def z_score():
-    #         mean=image.mean()
-    #         std=np.std(image, ddof=1)
-    #         image=(image-mean)/std
-    #     def zero_one():
-    #         m = image.max()
-    #         n = image.min()
-    #         image = (image-n)/(m-n)
-        
-
-    #     return eval(mode+"(image)")
 
     def _get_patch_target(self, validation=False):
         '''
