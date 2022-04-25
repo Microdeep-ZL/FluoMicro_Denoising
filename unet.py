@@ -217,12 +217,12 @@ class Unet:
         # y_true = tf.cast(y_true[..., :-1], tf.float32)
         y_true = y_true[..., :-1]
 
-        m = tf.reduce_max(y_true)
-        n = tf.reduce_min(y_true)
-        y_true = (y_true-n)/(m-n)
+        # m = tf.reduce_max(y_true)
+        # n = tf.reduce_min(y_true)
+        # y_true = (y_true-n)/(m-n)
 
         squared_difference = tf.reduce_mean(
-            tf.square(y_true[coords] - y_pred[coords]), axis=-1)
+            tf.square(y_true[coords] - y_pred[coords]), axis=[1,2,3])
         return squared_difference
 
     def predict(self, data_generator, save_dir, divide=1, batch_size = 1):
