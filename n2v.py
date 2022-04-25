@@ -9,7 +9,7 @@ class N2VConfig:
                  patch_shape=(64, 64),
                  patches_per_batch=32,
                  epochs=20,
-                 perc_pix=0.25,
+                 perc_pix=0.1736,
                  data_augmentation=True,
                  RGB=False,
                  validation_split=0
