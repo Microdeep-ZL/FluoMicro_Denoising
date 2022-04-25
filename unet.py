@@ -211,19 +211,29 @@ class Unet:
         ---
         y_true: (batch_size, height, width, channels+1), float32, 01 interval, the additional channel is mask
         y_pred: (batch_size, height, width, channels), float32, 01 interval
+
+        Return
+        -
+        MSE, only masked pixels are calculated
         '''
-        coords = y_true[..., -1] == 1
-        # 归一化
-        # y_true = tf.cast(y_true[..., :-1], tf.float32)
-        y_true = y_true[..., :-1]
+        mask=y_true[..., -1:]
+        y_true=tf.math.multiply(y_true[..., :-1], mask)
+        y_pred=tf.math.multiply(y_pred, mask)
+        mse = tf.reduce_mean(tf.square(y_true, y_pred), axis=[1,2,3])
+        return mse
 
-        # m = tf.reduce_max(y_true)
-        # n = tf.reduce_min(y_true)
-        # y_true = (y_true-n)/(m-n)
+        # coords = y_true[..., -1] == 1
+        # # 归一化
+        # # y_true = tf.cast(y_true[..., :-1], tf.float32)
+        # y_true = y_true[..., :-1]
 
-        squared_difference = tf.reduce_mean(
-            tf.square(y_true[coords] - y_pred[coords]), axis=[1,2,3])
-        return squared_difference
+        # # m = tf.reduce_max(y_true)
+        # # n = tf.reduce_min(y_true)
+        # # y_true = (y_true-n)/(m-n)
+
+        # squared_difference = tf.reduce_mean(
+        #     tf.square(y_true[coords] - y_pred[coords]), axis=-1)
+        # return squared_difference
 
     def predict(self, data_generator, save_dir, divide=1, batch_size = 1):
         '''
