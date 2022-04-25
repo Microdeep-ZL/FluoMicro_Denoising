@@ -157,7 +157,7 @@ class Unet:
         - reduce_lr_factor: argument for callback ReduceLROnPlateau
         '''
         if not self.compiled:
-            self.compile(learning_rate=0.0005, momentum=0.1)
+            self.compile()
         # x, y=next(data_generator)
         # return self.model.fit(x,y,batch_size=32,epochs=1)
         if self.config.validation_split:
@@ -178,11 +178,11 @@ class Unet:
                               validation_steps=self.config.validation_steps,
                               epochs=self.config.epochs)
 
-    def compile(self, learning_rate, mometum):
+    def compile(self, learning_rate=0.0005, momentum=0.1):
         # todo 选择更优的optimizer
         # 选择更优的参数 
         # 训练过程不计算PSNR和SSIM
-        optimizer=optimizers.RMSprop(learning_rate, momentum=mometum)
+        optimizer=optimizers.RMSprop(learning_rate, momentum=momentum)
         self.model.compile(optimizer, loss=self.loss)
         self.compiled = True
 
