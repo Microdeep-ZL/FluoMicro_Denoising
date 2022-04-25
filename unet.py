@@ -146,10 +146,11 @@ class Unet:
         # outputs=layers.Add(name="residual")([outputs,inputs])
         return Model(inputs, outputs)
 
-    def train(self, data_generator, early_stopping_patience=5, restore_best_weights=True, reduce_lr_patience=2, reduce_lr_factor=0.7):
+    def train(self, data_generator, epochs, early_stopping_patience=5, restore_best_weights=True, reduce_lr_patience=2, reduce_lr_factor=0.7):
         '''
         Parameter
         -
+        - epochs: Training epochs
         - data_generator: N2VDataGenerator instance
         - early_stopping_patience: argument for callback EarlyStopping
         - restore_best_weights: argument for callback EarlyStopping
@@ -174,9 +175,9 @@ class Unet:
         return self.model.fit(data_generator.get_training_batch(),
                               validation_data=data_generator.get_validation_batch(),
                               callbacks=callbacks_list,
-                              steps_per_epoch=self.config.steps_per_epoch,
-                              validation_steps=self.config.validation_steps,
-                              epochs=self.config.epochs)
+                              steps_per_epoch=data_generator.steps_per_epoch,
+                              validation_steps=data_generator.validation_steps,
+                              epochs=epochs)
 
     def compile(self, learning_rate=0.0005, momentum=0.1):
         # todo 选择更优的optimizer
@@ -211,29 +212,12 @@ class Unet:
         ---
         y_true: (batch_size, height, width, channels+1), float32, 01 interval, the additional channel is mask
         y_pred: (batch_size, height, width, channels), float32, 01 interval
-
-        Return
-        -
-        MSE, only masked pixels are calculated
         '''
-        mask=y_true[..., -1:]
-        y_true=tf.math.multiply(y_true[..., :-1], mask)
-        y_pred=tf.math.multiply(y_pred, mask)
-        mse = tf.reduce_mean(tf.square(y_true-y_pred), axis=[1,2,3])
-        return mse
-
-        # coords = y_true[..., -1] == 1
-        # # 归一化
-        # # y_true = tf.cast(y_true[..., :-1], tf.float32)
-        # y_true = y_true[..., :-1]
-
-        # # m = tf.reduce_max(y_true)
-        # # n = tf.reduce_min(y_true)
-        # # y_true = (y_true-n)/(m-n)
-
-        # squared_difference = tf.reduce_mean(
-        #     tf.square(y_true[coords] - y_pred[coords]), axis=-1)
-        # return squared_difference
+        coords = y_true[..., -1] == 1
+        y_true = y_true[..., :-1]
+        squared_difference = tf.reduce_mean(
+            tf.square(y_true[coords] - y_pred[coords]), axis=-1)
+        return squared_difference
 
     def predict(self, data_generator, save_dir, divide=1, batch_size = 1):
         '''

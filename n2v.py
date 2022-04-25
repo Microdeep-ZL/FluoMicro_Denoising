@@ -46,12 +46,6 @@ class N2VConfig:
         self.data_augmentation = data_augmentation
         self.validation_split = validation_split
 
-    def set_steps_per_epoch(self, steps_per_epoch):
-        self.steps_per_epoch = steps_per_epoch
-
-    def set_validation_steps(self, validation_steps):
-        self.validation_steps = validation_steps
-
 
 class N2VDataGenerator:
     '''
@@ -109,8 +103,8 @@ class N2VDataGenerator:
         # if self.config.data_augmentation:
         #     validation_steps *= self.config.data_augmentation + 1
         #     steps_per_epoch *= self.config.data_augmentation + 1
-        self.config.set_steps_per_epoch(steps_per_epoch)
-        self.config.set_validation_steps(validation_steps)
+        self.steps_per_epoch=steps_per_epoch
+        self.validation_steps=validation_steps
 
     def get_validation_batch(self):
         if self.config.validation_split:  # Otherwise, return None
@@ -198,7 +192,7 @@ class N2VDataGenerator:
                     noisy_images = np.concatenate(noisy_images)
                     clean_images = np.concatenate(clean_images)
                     yield noisy_images, clean_images                
-                    noisy_images, clean_images = [], []                
+                    noisy_images, clean_images = [], []
 
     def _get_noisy_clean(self):
         '''
@@ -415,3 +409,64 @@ class N2VDataGenerator:
         slices = tuple(slice(s, e) for s, e in zip(start, end))
 
         return patch[slices]
+
+
+class DataGenerator:
+    def __init__(self, file_path, gt_path, batch_size=1, validation_split=0):
+        self.file_path=file_path
+        self.gt_path=gt_path
+        self.batch_size=batch_size
+        with Image.open(file_path) as noisy:
+            if validation_split:
+                li=np.arange(noisy.n_frames)            
+                np.random.shuffle(li)
+                a=int(validation_split*noisy.n_frames)
+                self.validation_list=li[:a]
+                self.steps_per_epoch=(noisy.n_frames-a)//batch_size
+                self.validation_steps=a//batch_size
+            else:
+                self.validation_list=[]
+                self.validation_steps=0
+                self.steps_per_epoch=noisy.n_frames//batch_size
+
+    def get_training_batch(self, validation=False):
+        image_generator=self.get_noisy_clean(validation)
+        while 1:
+            noisy, gt=[],[]
+            for i in range(self.batch_size):
+                a,b=next(image_generator)
+                noisy.append(a)
+                gt.append(b)
+            yield np.concatenate(noisy), np.concatenate(gt)
+
+    def get_validation_batch(self):
+        if self.validation_split:  # Otherwise, return None
+            return self.get_training_batch(validation=True)
+
+    def get_noisy_clean(self, validation=False):
+        with Image.open(self.file_path) as noisy, Image.open(self.gt_path) as gt:
+            assert noisy.n_frames==gt.n_frames,"The number of noisy and clean images are not equal"
+            while 1:
+                for i in range(noisy.n_frames):
+                    noisy.seek(i)
+                    gt.seek(i)
+                    if validation==(i in self.validation_list):
+                        num=np.random.randint(8)
+                        # 数据增强
+                        if num:
+                            transposed_noisy=noisy.transpose(num)
+                            transposed_gt=gt.transpose(num)
+                            noisy_arr=np.array(transposed_noisy, dtype="float32")
+                            gt_arr=np.array(transposed_gt, dtype="float32")
+                        else:
+                            noisy_arr=np.array(noisy, dtype="float32")
+                            gt_arr=np.array(gt, dtype="float32")
+                        yield self._normalization(noisy_arr), self._normalization(gt_arr)
+
+    def _normalization(self, image, percent_left=0, percent_right=0.00005):
+        '''Return the image array normalized to 01 interval'''
+        histogram=np.sort(image.flatten())
+        n=histogram[int(percent_left*len(histogram))]
+        m=histogram[-int(percent_right*len(histogram))]
+        image=np.clip(image,n,m)
+        return (image-n)/(m-n)
