@@ -219,7 +219,7 @@ class Unet:
         mask=y_true[..., -1:]
         y_true=tf.math.multiply(y_true[..., :-1], mask)
         y_pred=tf.math.multiply(y_pred, mask)
-        mse = tf.reduce_mean(tf.square(y_true, y_pred), axis=[1,2,3])
+        mse = tf.reduce_mean(tf.square(y_true-y_pred), axis=[1,2,3])
         return mse
 
         # coords = y_true[..., -1] == 1
