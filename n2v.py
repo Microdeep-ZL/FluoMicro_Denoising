@@ -430,10 +430,17 @@ class DataGenerator:
 
     def get_training_batch(self, validation=False):
         image_generator=self.get_noisy_clean(validation)
+        # while 1:
+        #     noisy, gt=[],[]
+        #     for i in range(self.batch_size):
+        #         a,b=next(image_generator)
+        #         noisy.append(a)
+        #         gt.append(b)
+        #     yield np.concatenate(noisy), np.concatenate(gt)
         while 1:
             noisy, gt=[],[]
+            a,b=next(image_generator)
             for i in range(self.batch_size):
-                a,b=next(image_generator)
                 noisy.append(a)
                 gt.append(b)
             yield np.concatenate(noisy), np.concatenate(gt)
@@ -455,12 +462,17 @@ class DataGenerator:
                         if num:
                             transposed_noisy=noisy.transpose(num)
                             transposed_gt=gt.transpose(num)
-                            noisy_arr=np.array(transposed_noisy, dtype="float32")[np.newaxis, ... , np.newaxis]
-                            gt_arr=np.array(transposed_gt, dtype="float32")[np.newaxis, ... , np.newaxis]
+                            noisy_arr=np.array(transposed_noisy, dtype="float32")
+                            gt_arr=np.array(transposed_gt, dtype="float32")
                         else:
-                            noisy_arr=np.array(noisy, dtype="float32")[np.newaxis, ... , np.newaxis]
-                            gt_arr=np.array(gt, dtype="float32")[np.newaxis, ... , np.newaxis]
-                        yield self._normalization(noisy_arr), self._normalization(gt_arr)
+                            noisy_arr=np.array(noisy, dtype="float32")
+                            gt_arr=np.array(gt, dtype="float32")
+                        noisy_arr,gt_arr=self._normalization(noisy_arr), self._normalization(gt_arr)
+                        for j in range(2):
+                            for k in range(2):
+                                a=noisy_arr[np.newaxis, j*1024:(j+1)*1024,k*1024:(k+1)*1024 , np.newaxis]
+                                b=gt_arr[np.newaxis, j*1024:(j+1)*1024,k*1024:(k+1)*1024 , np.newaxis]
+                                yield a,b
 
     def _normalization(self, image, percent_left=0, percent_right=0.00005):
         '''Return the image array normalized to 01 interval'''
