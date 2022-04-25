@@ -414,6 +414,7 @@ class DataGenerator:
         self.file_path=file_path
         self.gt_path=gt_path
         self.batch_size=batch_size
+        self.validation_split=validation_split
         with Image.open(file_path) as noisy:
             if validation_split:
                 li=np.arange(noisy.n_frames)            
@@ -454,11 +455,11 @@ class DataGenerator:
                         if num:
                             transposed_noisy=noisy.transpose(num)
                             transposed_gt=gt.transpose(num)
-                            noisy_arr=np.array(transposed_noisy, dtype="float32")
-                            gt_arr=np.array(transposed_gt, dtype="float32")
+                            noisy_arr=np.array(transposed_noisy, dtype="float32")[np.newaxis, ... , np.newaxis]
+                            gt_arr=np.array(transposed_gt, dtype="float32")[np.newaxis, ... , np.newaxis]
                         else:
-                            noisy_arr=np.array(noisy, dtype="float32")
-                            gt_arr=np.array(gt, dtype="float32")
+                            noisy_arr=np.array(noisy, dtype="float32")[np.newaxis, ... , np.newaxis]
+                            gt_arr=np.array(gt, dtype="float32")[np.newaxis, ... , np.newaxis]
                         yield self._normalization(noisy_arr), self._normalization(gt_arr)
 
     def _normalization(self, image, percent_left=0, percent_right=0.00005):
