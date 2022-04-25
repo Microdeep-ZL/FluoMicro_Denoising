@@ -8,7 +8,6 @@ class N2VConfig:
                  ground_truth_paths=None,
                  patch_shape=(64, 64),
                  patches_per_batch=32,
-                 epochs=20,
                  perc_pix=0.1736,
                  data_augmentation=True,
                  RGB=False,
@@ -41,7 +40,6 @@ class N2VConfig:
         self.patch_shape = patch_shape
         # self.input_shape = patch_shape + channels
         self.patches_per_batch = patches_per_batch
-        self.epochs = epochs
         self.perc_pix = perc_pix
         self.data_augmentation = data_augmentation
         self.validation_split = validation_split
