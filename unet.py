@@ -155,7 +155,7 @@ class Unet:
                           callbacks.EarlyStopping(
                               monitor, patience=early_stopping_patience, restore_best_weights=restore_best_weights),
                           callbacks.ModelCheckpoint(
-                              "ckpt/best", monitor, save_best_only=True, save_weights_only=True),
+                              f"ckpt/{'supervised' if supervised else 'self_supervised'}/best", monitor, save_best_only=True, save_weights_only=True),
                           callbacks.ReduceLROnPlateau(monitor, factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.0001)]            
         return self.model.fit(data_generator.get_training_batch(supervised=supervised),
                               validation_data=data_generator.get_validation_batch(supervised=supervised),
