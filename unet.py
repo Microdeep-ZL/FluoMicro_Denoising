@@ -150,7 +150,7 @@ class Unet:
         '''
         if not self.compiled:
             self.compile(supervised)
-        monitor="val_loss"
+        monitor="val_loss" if data_generator.config.validation_split else "loss"
         callbacks_list = [callbacks.TensorBoard(log_dir="tensorboard"),
                           callbacks.EarlyStopping(
                               monitor, patience=early_stopping_patience, restore_best_weights=restore_best_weights),
