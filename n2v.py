@@ -247,7 +247,7 @@ class N2VDataGenerator:
                                 yield (self._image_to_array(transposed_image), self._image_to_array(gt.transpose(aug)) if supervised else None)
                             else:
                                 yield (self._image_to_array(image), self._image_to_array(gt) if supervised else None)
-                    gt.close()
+                    if supervised: gt.close()
 
     def _image_to_array(self,image):
         array=np.array(image, dtype="float32")
