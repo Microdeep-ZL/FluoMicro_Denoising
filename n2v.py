@@ -489,7 +489,7 @@ class DataGenerator:
                                 b=gt_arr[np.newaxis, j*1024:(j+1)*1024,k*1024:(k+1)*1024 , np.newaxis]
                                 yield a,b
 
-    def _normalization(self, image, percent_left=0, percent_right=0.00005):
+    def _normalization(self, image, percent_left=0.1**4, percent_right=0.1**7):
         '''Return the image array normalized to 01 interval'''
         histogram=np.sort(image.flatten())
         n=histogram[int(percent_left*len(histogram))]
