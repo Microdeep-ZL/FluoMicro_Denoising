@@ -436,7 +436,7 @@ class DataGenerator:
                 np.random.shuffle(li)
                 a=int(validation_split*noisy.n_frames)
                 self.validation_list=li[:a]
-                self.steps_per_epoch=(noisy.n_frames-a)//batch_size
+                self.steps_per_epoch=(noisy.n_frames-a)*4//batch_size
                 self.validation_steps=a//batch_size
             else:
                 self.validation_list=[]
@@ -474,7 +474,7 @@ class DataGenerator:
                     if validation==(i in self.validation_list):
                         num=np.random.randint(8)
                         # 数据增强
-                        if num:
+                        if num!=7:
                             transposed_noisy=noisy.transpose(num)
                             transposed_gt=gt.transpose(num)
                             noisy_arr=np.array(transposed_noisy, dtype="float32")
