@@ -1,6 +1,5 @@
 from PIL import Image
 import numpy as np
-from tensorflow.keras import layers
 
 
 class N2VConfig:
@@ -8,7 +7,7 @@ class N2VConfig:
                  ground_truth_paths=None,
                  patch_shape=(64, 64),
                  patches_per_batch=32,
-                 perc_pix=0.1736,
+                 perc_pix=1,
                  data_augmentation=True,
                  RGB=False,
                  validation_split=0
@@ -35,10 +34,7 @@ class N2VConfig:
         self.ground_truth_paths = ground_truth_paths
 
         self.RGB = RGB
-        channels = (3,) if RGB else (1,)
-        self.input_shape = (None, None) + channels
         self.patch_shape = patch_shape
-        # self.input_shape = patch_shape + channels
         self.patches_per_batch = patches_per_batch
         self.perc_pix = perc_pix
         self.data_augmentation = data_augmentation
@@ -104,17 +100,17 @@ class N2VDataGenerator:
         self.steps_per_epoch=steps_per_epoch
         self.validation_steps=validation_steps
 
-    def get_validation_batch(self):
+    def get_validation_batch(self, supervised=False):
         if self.config.validation_split:  # Otherwise, return None
-            return self.get_training_batch(validation=True)
+            return self.get_training_batch(validation=True, supervised=supervised)
 
-    def get_training_batch(self, validation=False):
+    def get_training_batch(self, validation=False, supervised=False):
         '''
         Return (patches, targets)
             patches: (patches_per_batch, height, width, channels)
             targets: (patches_per_batch, height, width, channels+1)
         '''
-        patch_target_generator = self._get_patch_target(validation)
+        patch_target_generator = self._get_patch_target(validation, supervised)
         while 1:
         # try:
             patches, targets = [], []
@@ -168,7 +164,7 @@ class N2VDataGenerator:
                     yield np.concatenate(images)
                     images=[]
                 
-    def get_evaluation_data(self, batch_size=1):
+    def get_evaluation_data(self, batch_size):
         '''
         Return (noisy_images, clean_images)
             noisy_images: (batch_size, height, width, channels)
@@ -182,7 +178,7 @@ class N2VDataGenerator:
                     clean_images = np.concatenate(clean_images)
                     yield noisy_images, clean_images
                     noisy_images, clean_images = [], []
-                yield None, None
+                yield None, clean
             else:
                 noisy_images.append(noisy)
                 clean_images.append(clean)
@@ -203,75 +199,82 @@ class N2VDataGenerator:
         clean_paths=self.config.ground_truth_paths
         images_total=0
         for i in range(len(noisy_paths)):
-            with Image.open(noisy_paths[i]) as noisy_image:
-                with Image.open(clean_paths[i]) as clean_image:
-                    images_total+=noisy_image.n_frames
-                    assert noisy_image.n_frames==clean_image.n_frames, "The number of noisy and clean images must be equal"
+            with Image.open(noisy_paths[i]) as noisy_image, Image.open(clean_paths[i]) as clean_image:
+                images_total+=noisy_image.n_frames
+                assert noisy_image.n_frames==clean_image.n_frames, "The number of noisy and clean images must be equal"
         counter=0
         for i in range(len(noisy_paths)):
-            with Image.open(noisy_paths[i]) as noisy_image:
-                with Image.open(clean_paths[i]) as clean_image:
-                    for j in range(noisy_image.n_frames):
-                            noisy_image.seek(j)
-                            clean_image.seek(j)                        
-                            noisy = np.array(noisy_image).astype("float32")
-                            clean = np.array(clean_image).astype("float32")
+            with Image.open(noisy_paths[i]) as noisy_image, Image.open(clean_paths[i]) as clean_image:
+                for j in range(noisy_image.n_frames):
+                    noisy_image.seek(j);clean_image.seek(j)                        
+                    noisy = np.array(noisy_image, dtype="float32")
+                    clean = np.array(clean_image, dtype="float32")
 
-                            axis = 0 if self.config.RGB else (0,-1)
-                            noisy = np.expand_dims(noisy, axis)
-                            clean = np.expand_dims(clean, axis)
+                    axis = 0 if self.config.RGB else (0,-1)
+                    noisy = np.expand_dims(noisy, axis)
+                    clean = np.expand_dims(clean, axis)
 
-                            noisy = self._normalization(noisy)
-                            clean = self._normalization(clean)
-                            yield noisy, clean
-                            counter+=1
-                            print(f"{counter}/{images_total} images have been processed", end="\r")
-            yield None, None
+                    noisy = self._normalization(noisy)
+                    clean = self._normalization(clean)
+                    yield noisy, clean
+                    counter+=1
+                    print(f"{counter}/{images_total} images have been processed", end="\r")
+            yield None, noisy_paths[i] #第2项提示noisy image的文件名
         print()
 
-    def _load_images(self, validation=False):
-        '''Return image array (height, width) or (height, width, channels), depending on the image.'''
+    def _load_images(self, validation, supervised):
+        '''
+        Return (image_array, None) or (image_array, ground_truth_array)
+        image array (height, width) or (height, width, channels), depending on the image.
+        '''
         while 1:
-            for file_path in self.config.file_paths:
+            for j in range(len(self.config.file_paths)):
+                file_path=self.config.file_paths[j]
+                if supervised:
+                    gt_path=self.config.ground_truth_paths[j]
+                    gt=Image.open(gt_path)
                 with Image.open(file_path) as image:
                     # 随机打乱图片的顺序
                     for i in self._shuffle_range(image.n_frames):
                         if validation == (i in self.is_validation.get(file_path, [])):
                             image.seek(i)
+                            if supervised: gt.seek(i)
                             # yield np.array(image)
-                            if self.config.data_augmentation and not validation:
+                            if self.config.data_augmentation and (not validation) and np.random.randint(8)!=0:
                                 # 八分之一概率不做数据增强
-                                transposed_image = image.transpose(self._shuffle_range(7)[0]) if np.random.randint(8)==0 else image
-                                yield self._image_to_array(transposed_image)
+                                aug=self._shuffle_range(7)[0]
+                                transposed_image = image.transpose(aug)
+                                yield (self._image_to_array(transposed_image), self._image_to_array(gt.transpose(aug)) if supervised else None)
                             else:
-                                yield self._image_to_array(image)
+                                yield (self._image_to_array(image), self._image_to_array(gt) if supervised else None)
+                    gt.close()
 
     def _image_to_array(self,image):
-        array=np.array(image).astype("float32")
+        array=np.array(image, dtype="float32")
         # Uniform distribution [0.00002, 0.0001) and [0.00005, 0.0004)
-        percent_left=np.random.ranf()*(0.0001-0.00002)+0.00002
-        percent_right=np.random.ranf()*(0.0004-0.00005)+0.00005
-        array=self._normalization(array,percent_left,percent_right)
+        # percent_left=np.random.ranf()*(0.0001-0.00002)+0.00002
+        # percent_right=np.random.ranf()*(0.0004-0.00005)+0.00005
+        # array=self._normalization(array,percent_left,percent_right)
+        array=self._normalization(array)
         return array
 
-    def _normalization(self, image, percent_left=0, percent_right=0.00005):
+    def _normalization(self, image, percent_left=0.1**4, percent_right=0.1**7):
         '''Return the image array normalized to 01 interval'''
-        # test 调整亮度对比度，作为预处理的步骤之一
         histogram=np.sort(image.flatten())
         n=histogram[int(percent_left*len(histogram))]
-        m=histogram[-int(percent_right*len(histogram))]
+        m=histogram[-1-int(percent_right*len(histogram))]
         image=np.clip(image,n,m)
         return (image-n)/(m-n)
 
-    def _get_patch_target(self, validation=False):
+    def _get_patch_target(self, validation, supervised):
         '''
         Return (patch, target)
             patch: (1, height, width, channels)
             target: (1, height, width, channels+1)
         '''
-        image_generator = self._load_images(validation)
+        image_generator = self._load_images(validation, supervised)
         while 1:
-            image = next(image_generator)
+            image, gt = next(image_generator)
             # image = self._normalization(image)
 
             image_shape = image.shape
@@ -295,8 +298,20 @@ class N2VDataGenerator:
                                       i:i+patch_shape[0],
                                       j:j+patch_shape[1]
                                       ]
-
-                    target = self._manipulate(patch)
+                    # return patch
+                    if supervised:
+                        if image.ndim==2:
+                            target = gt[np.newaxis,
+                                      i:i+patch_shape[0],
+                                      j:j+patch_shape[1],
+                                      np.newaxis]
+                        else:
+                            target = gt[np.newaxis,
+                                        i:i+patch_shape[0],
+                                        j:j+patch_shape[1]
+                                        ] 
+                    else:
+                        target = self._manipulate(patch)
                     yield patch, target
 
     def _padding_image(self, image):
@@ -426,7 +441,7 @@ class DataGenerator:
             else:
                 self.validation_list=[]
                 self.validation_steps=0
-                self.steps_per_epoch=noisy.n_frames//batch_size
+                self.steps_per_epoch=noisy.n_frames*4//batch_size
 
     def get_training_batch(self, validation=False):
         image_generator=self.get_noisy_clean(validation)

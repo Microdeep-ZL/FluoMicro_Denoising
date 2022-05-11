@@ -25,40 +25,33 @@ import os
 
 
 class Unet:
-    '''
-    Parameter
-    ---
-    model_summary: Bool. Defaults to False. Whether to print model summary and plot the topograhpy.'''
-
-    def __init__(self, config, n_depth=3, conv="SeparableConv2D", model_summary=False):
+    def __init__(self, n_depth=3, kernel_size=5, RGB=False, conv="SeparableConv2D", model_summary=False):
         '''
         Parameter
         -
+        - n_depth: the depth of contracting path, i.e. the number of MaxPooling2D layers in total. Defaults to 3
+        - kernel_size: Defualts to 5.
+        TODO 其实也可以用3*3的空洞卷积
         - conv: Convolutional layer to be used in model. One of "Conv2D" and "SeparableConv2D". Defaults to 'SeparableConv2D'
+        - model_summary: Bool. Defaults to False. Whether to print model summary and plot the topograhpy
         '''
-        self.config = config
         self.Conv2D = layers.Conv2D if conv == "Conv2D" else layers.SeparableConv2D
-        self.model = self.define_model(n_depth)
+        self.model = self.define_model(n_depth, kernel_size, RGB)
         if model_summary:
             self.model.summary()
             plot_model(self.model, type(self).__name__+".png", show_shapes=True)
-
         self.compiled = False
 
-    def define_model(self, n_depth):
+    def define_model(self, n_depth, kernel_size, RGB):
         '''
         Assume the image has shape (height, width, channels)
-        Parameters
-        ---
-        n_depth:    Defaults to 2, it's suitable for image of size about (128, 128). the depth of contracting path, i.e. the number of MaxPooling2D layers in total. 
-                    If n_depth is too big, image of small size will not be properly processed
         '''
-        inputs = Input(shape=self.config.input_shape)
+        inputs = Input(shape=(None,None, 3 if RGB else 1))
         # inputs = Input(shape=(128,128,1))
         # todo 当图块尺寸为奇数时，concatenate层报错
         # inputs = Input(shape=(567,567,1))
 
-        # 不能用于输入图块，容易导致黑色背景变得很白
+        # 不能用于图块，容易导致黑色背景的图块变得很白
         # inputs = Rescaling()(inputs)
 
         contracting = []
@@ -69,12 +62,12 @@ class Unet:
 
             # 第一个卷积层含64个filters，最后一个卷积层含256个filters
             block.add(self.Conv2D(
-                2**(i+6), 3, use_bias=False, padding='same'))
+                2**(i+6), kernel_size, use_bias=False, padding='same'))
             block.add(layers.BatchNormalization())
             block.add(layers.Activation("relu"))
 
             block.add(self.Conv2D(
-                2**(i+6), 3, use_bias=False, padding='same'))
+                2**(i+6), kernel_size, use_bias=False, padding='same'))
             block.add(layers.BatchNormalization())
             block.add(layers.Activation("relu"))
             contracting.append(block)
@@ -85,12 +78,12 @@ class Unet:
             if i != 0:
                 # 唯一的卷积层含128个filters
                 block.add(self.Conv2D(2**(6+n_depth-i),
-                          3, use_bias=False, padding='same'))
+                          kernel_size, use_bias=False, padding='same'))
                 block.add(layers.BatchNormalization())
                 block.add(layers.Activation("relu"))
 
                 block.add(self.Conv2D(2**(6+n_depth-i),
-                          3, use_bias=False, padding='same'))
+                          kernel_size, use_bias=False, padding='same'))
                 block.add(layers.BatchNormalization())
                 block.add(layers.Activation("relu"))
 
@@ -98,16 +91,13 @@ class Unet:
             expanding.append(block)
 
         ending = models.Sequential([
-            self.Conv2D(2**6, 3, use_bias=False, padding='same'),
+            self.Conv2D(2**6, kernel_size, use_bias=False, padding='same'),
             layers.BatchNormalization(),
             layers.Activation("relu"),
 
-            self.Conv2D(2**6, 3, use_bias=False, padding='same'),
+            self.Conv2D(2**6, kernel_size, use_bias=False, padding='same'),
             layers.BatchNormalization(),
             layers.Activation("relu"),
-            # todo 最终的单点预测输出
-            # todo 尺寸和原图相等, 已经做到了，但是和n2v的方法一样吗？
-            # todo Noise2Void到底是怎么做的，还是得看源码和论文
             layers.Conv2D(1, 1),
             # Normalize to 01 interval
             # Rescaling()
@@ -146,45 +136,46 @@ class Unet:
         # outputs=layers.Add(name="residual")([outputs,inputs])
         return Model(inputs, outputs)
 
-    def train(self, data_generator, epochs, early_stopping_patience=5, restore_best_weights=True, reduce_lr_patience=2, reduce_lr_factor=0.7):
+    def train(self, data_generator, epochs, supervised=False, early_stopping_patience=5, restore_best_weights=True, reduce_lr_patience=2, reduce_lr_factor=0.7, **kwargs):
         '''
         Parameter
         -
-        - epochs: Training epochs
         - data_generator: N2VDataGenerator instance
+        - epochs: Training epochs
+
         - early_stopping_patience: argument for callback EarlyStopping
         - restore_best_weights: argument for callback EarlyStopping
         - reduce_lr_patience: argument for callback ReduceLROnPlateau
         - reduce_lr_factor: argument for callback ReduceLROnPlateau
         '''
         if not self.compiled:
-            self.compile()
-        # x, y=next(data_generator)
-        # return self.model.fit(x,y,batch_size=32,epochs=1)
-        if self.config.validation_split:
-            monitor="val_loss"
-        else:
-            monitor="loss"
+            self.compile(supervised)
+        monitor="val_loss"
         callbacks_list = [callbacks.TensorBoard(log_dir="tensorboard"),
                           callbacks.EarlyStopping(
-                              monitor=monitor, patience=early_stopping_patience, restore_best_weights=restore_best_weights),
+                              monitor, patience=early_stopping_patience, restore_best_weights=restore_best_weights),
                           callbacks.ModelCheckpoint(
-                              filepath="ckpt/best", monitor=monitor, save_best_only=True, save_weights_only=True),
-                          callbacks.ReduceLROnPlateau(monitor=monitor, factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.00005)]
-        print("TRAINING BEGINS".center(40, '-'))
-        return self.model.fit(data_generator.get_training_batch(),
-                              validation_data=data_generator.get_validation_batch(),
+                              "ckpt/best", monitor, save_best_only=True, save_weights_only=True),
+                          callbacks.ReduceLROnPlateau(monitor, factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.0001)]            
+        return self.model.fit(data_generator.get_training_batch(supervised=supervised),
+                              validation_data=data_generator.get_validation_batch(supervised=supervised),
                               callbacks=callbacks_list,
                               steps_per_epoch=data_generator.steps_per_epoch,
                               validation_steps=data_generator.validation_steps,
                               epochs=epochs)
 
-    def compile(self, learning_rate=0.0005, momentum=0.1):
+    def compile(self, supervised, learning_rate=0.0005, momentum=0.1):
         # todo 选择更优的optimizer
         # 选择更优的参数 
-        # 训练过程不计算PSNR和SSIM
+        if supervised:
+            loss="mse"
+            metrics=['mae']
+        else:
+            loss=self.loss
+            metrics=None
+
         optimizer=optimizers.RMSprop(learning_rate, momentum=momentum)
-        self.model.compile(optimizer, loss=self.loss)
+        self.model.compile(optimizer, loss, metrics)
         self.compiled = True
 
     @tf.function
@@ -195,17 +186,14 @@ class Unet:
         y_true: (batch_size, height, width, channels), float32, 01 interval, there's no additional channel as mask
         y_pred: (batch_size, height, width, channels), float32, 01 interval
         '''
-        # m = tf.reduce_max(y_true)
-        # n = tf.reduce_min(y_true)
-        # y_true = (y_true-n)/(m-n)
-        # print("psnr:", tf.executing_eagerly())
         return tf.image.psnr(y_true, y_pred, 1)
 
     @tf.function
     def ssim(self, y_true, y_pred):
-        # print("ssim:", tf.executing_eagerly())
+        '''See `psnr`'''
         return tf.image.ssim(y_true, y_pred, 1)
-
+    
+    # 不需要加@tf.function吗？我好像之前试验过，自动就是的
     def loss(self, y_true, y_pred):
         '''
         Parameter
@@ -216,7 +204,7 @@ class Unet:
         coords = y_true[..., -1] == 1
         y_true = y_true[..., :-1]
         squared_difference = tf.reduce_mean(
-            tf.square(y_true[coords] - y_pred[coords]), axis=-1)
+            tf.square(y_true[coords] - y_pred[coords]))
         return squared_difference
 
     def predict(self, data_generator, save_dir, divide=1, batch_size = 1):
@@ -264,7 +252,7 @@ class Unet:
         duration = np.round(duration/counter/batch_size, 1)
         print(f"{duration}s on average to process each image")
 
-    def evaluate(self, data_generator, save_dir=None, divide=1, batch_size = 1):
+    def evaluate(self, data_generator, divide=1, save_dir=None, batch_size = 1):
         '''
         Parameter
         ---
@@ -291,7 +279,7 @@ class Unet:
         file_number = 0
         for x, y in data_generator.get_evaluation_data(batch_size):
             if x is None:
-                self._save_images(restored, save_dir, file_number)
+                self._save_images(restored, save_dir, file_name=y)
                 restored = []
                 file_number += 1
                 continue
@@ -314,8 +302,7 @@ class Unet:
             duration += time.time()-begin
 
             old_ssim, old_psnr = self.ssim(y, x), self.psnr(y, x)
-            new_ssim, new_psnr = self.ssim(
-                y, restored_image), self.psnr(y, restored_image)
+            new_ssim, new_psnr = self.ssim(y, restored_image), self.psnr(y, restored_image)
 
             SSIM.append(new_ssim)
             PSNR.append(new_psnr)
@@ -334,7 +321,7 @@ class Unet:
 
         return result
 
-    def _save_images(self, restored, save_dir, file_number):
+    def _save_images(self, restored, save_dir, file_name):
         # 输入文件有多少个，输出文件就应该有多少个
         if save_dir:
             restored = np.concatenate(restored)
@@ -342,13 +329,14 @@ class Unet:
             # todo 保存100张图片时，也可能会OOM
             # 可以先单张转为uint8，再concatenate尝试解决
             restored = np.around(restored*255).astype("uint8")
+            # 如果是灰度图像，去掉channel轴
             try:
-                # 如果是灰度图像，去掉channel轴
                 restored = np.squeeze(restored, axis=-1)
             except ValueError:
                 pass
 
             if not os.path.isdir(save_dir): os.makedirs(save_dir)
-            file_name = f"restored_{file_number}.tif"
+            # file_name = f"restored_{file_number}.tif"
+            file_name=os.path.splitext(os.path.basename(file_name))[0]+"_restored.tif"
             save_path = os.path.join(save_dir, file_name)
             io.imsave(save_path, restored)
