@@ -157,6 +157,7 @@ class Unet:
                           callbacks.ModelCheckpoint(
                               f"ckpt/{'supervised' if supervised else 'self_supervised'}/best", monitor, save_best_only=True, save_weights_only=True),
                           callbacks.ReduceLROnPlateau(monitor, factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.0001)]            
+        print(F"{'SUPERVISED' if supervised else 'SELF-SUPERVISED'} TRAINING BEGINS".center(40,'-'))
         return self.model.fit(data_generator.get_training_batch(supervised=supervised),
                               validation_data=data_generator.get_validation_batch(supervised=supervised),
                               callbacks=callbacks_list,
