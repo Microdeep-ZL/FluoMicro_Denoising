@@ -98,7 +98,7 @@ class Unet:
             self.Conv2D(2**6, kernel_size, use_bias=False, padding='same'),
             layers.BatchNormalization(),
             layers.Activation("relu"),
-            layers.Conv2D(1, 1),
+            layers.Conv2D(3 if RGB else 1, 1),
             # Normalize to 01 interval
             # Rescaling()
 
