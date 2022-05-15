@@ -258,7 +258,7 @@ class N2VDataGenerator:
         array=self._normalization(array)
         return array
 
-    def _normalization(self, image, percent_left=0.1**4, percent_right=0.1**7):
+    def _normalization(self, image, percent_left=0.1525, percent_right=1e-4):
         '''Return the image array normalized to 01 interval'''
         histogram=np.sort(image.flatten())
         n=histogram[int(percent_left*len(histogram))]

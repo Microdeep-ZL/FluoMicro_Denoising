@@ -136,7 +136,7 @@ class Unet:
         # outputs=layers.Add(name="residual")([outputs,inputs])
         return Model(inputs, outputs)
 
-    def train(self, data_generator, epochs, supervised=False, early_stopping_patience=5, restore_best_weights=True, reduce_lr_patience=2, reduce_lr_factor=0.7, **kwargs):
+    def train(self, data_generator, epochs, supervised=False, early_stopping_patience=3, restore_best_weights=True, reduce_lr_patience=2, reduce_lr_factor=0.7):
         '''
         Parameter
         -
@@ -156,7 +156,7 @@ class Unet:
                               monitor, patience=early_stopping_patience, restore_best_weights=restore_best_weights),
                           callbacks.ModelCheckpoint(
                               f"ckpt/{'supervised' if supervised else 'self_supervised'}/best", monitor, save_best_only=True, save_weights_only=True),
-                          callbacks.ReduceLROnPlateau(monitor, factor=reduce_lr_factor, patience=reduce_lr_patience, min_lr=0.0001)]            
+                          callbacks.ReduceLROnPlateau(monitor, factor=reduce_lr_factor, patience=reduce_lr_patience)]            
         print(F"{'SUPERVISED' if supervised else 'SELF-SUPERVISED'} TRAINING BEGINS".center(40,'-'))
         return self.model.fit(data_generator.get_training_batch(supervised=supervised),
                               validation_data=data_generator.get_validation_batch(supervised=supervised),
